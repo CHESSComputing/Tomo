@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Mon Dec  6 15:36:22 2021
@@ -8,6 +8,7 @@ Created on Mon Dec  6 15:36:22 2021
 
 import sys
 import yaml
+import pyinputplus as pyip
 import matplotlib.pyplot as plt
 import logging
 
@@ -85,35 +86,36 @@ def get_num_files(files, file_type, num_angles = None):
             logging.debug('Found ' + str(num_files) + ' ' + file_type)
         else:
             logging.debug('Found ' + str(num_files) + ' ' + file_type + 's')
-            #num_files = pyip.inputNum('How many would you like to use (enter 0 for all)?: ', min=0)  (python3)
-            num_files = get_int_in_range(
-                    'How many would you like to use (enter 0 for all)?: ', 
-                    0, num_files)
+            num_files = pyip.inputInt('How many would you like to use (enter 0 for all)?: ', 
+                    min=0, max=num_files)
             if not num_files: num_files = len(files)
     else:
         sys.exit('Unable to find any ' + file_type)
     return num_files
 
-# would be nicer to import pyinputplus instead of using this (python3)
-def get_int_in_range(prompt, min_value, max_value):
+# use pyinputplus instead of using this (python3)
+"""
+def get_int_in_range(prompt, min_value=None, max_value=None):
     while True:
         try:
-            value = int(raw_input(prompt))
+            value = int(input(prompt))
         except NameError or ValueError:
             print('Illegal input, try again')
             continue
-        if value < min_value or value > max_value:
+        if (min_value and value < min_value) or (max_value and value > max_value):
             print('Input out of range, try again')
             continue
         else:
             break
     return value
+"""
 
-# would be nicer to import pyinputplus instead of using this (python3)
+# use pyinputplus instead of using this (python3)
+"""
 def get_yes_no(prompt):
     while True:
         try:
-            value = raw_input(prompt).lower().strip()[0]
+            value = input(prompt).lower().strip()[0]
         except NameError or ValueError:
             print('Illegal input, try again')
             continue
@@ -123,24 +125,31 @@ def get_yes_no(prompt):
         else:
             break
     return value == 'y'
+"""
 
-def quick_imshow(a, title=None, save_figname=None, **kwargs):
-#    plt.clf()
+def quick_imshow(a, title=None, save_figname=None, clear=False, **kwargs):
+    if clear:
+        if title: plt.close(fig=title)
+        else: plt.clf()
     plt.ion()
     plt.figure(title)
     plt.imshow(a, **kwargs)
     if save_figname: plt.savefig(save_figname)
     plt.pause(1)
 
-def quick_plot(y, title=None):
-#    plt.clf()
+def quick_plot(y, title=None, clear=False):
+    if clear:
+        if title: plt.close(fig=title)
+        else: plt.clf()
     plt.ion()
     plt.figure(title)
     plt.plot(y)
     plt.pause(1)
 
-def quick_xyplot(x, y, title=None):
-#    plt.clf()
+def quick_xyplot(x, y, title=None, clear=False):
+    if clear:
+        if title: plt.close(fig=title)
+        else: plt.clf()
     plt.ion()
     plt.figure(title)
     plt.plot(x, y)
