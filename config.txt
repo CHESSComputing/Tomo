@@ -14,9 +14,7 @@ tomo_data_folder_3 = '/nfs/chess/raw/2021-2/id1a3/ramshaw-3168-A/tomo_1mm_0508-1
 detector_id = 'manta'
 
 # Scan parameters
-start_angle = 0.0
-end_angle = 180.0
-num_angles = 720
+num_thetas = 720
 lens_magnification = 5
 z_pos_1 = -2.69
 z_pos_2 = -1.69

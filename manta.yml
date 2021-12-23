@@ -1,0 +1,6 @@
+detector:
+  id: manta
+  pixels:
+    rows: 3008
+    columns: 4112
+    size: [0.00345, 0.00345]

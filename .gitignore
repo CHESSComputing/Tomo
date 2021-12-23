@@ -1,2 +1,6 @@
 *.png
 *.npy
+.spyproject
+__pycache__
+backup
+location_of_original_data.txt
