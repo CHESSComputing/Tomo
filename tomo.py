@@ -18,7 +18,8 @@ import pyinputplus as pyip
 import numpy as np
 import numexpr as ne
 import multiprocessing as mp
-import scipy as sp
+import scipy.ndimage as spi
+from time import time
 
 import msnc_tools as msnc
 
@@ -238,7 +239,6 @@ class Tomo:
             if not pixel_size:
                 pars_missing.append('detector:pixels:size')
             else:
-                print(type(pixel_size))
                 if type(pixel_size) == int or type(pixel_size) == float:
                     self.pixel_size = pixel_size/lens_magnification
                 elif type(pixel_size) == list:
@@ -291,7 +291,7 @@ class Tomo:
             if not self.tdf_num_imgs or not self.tdf_img_start:
                 logging.error('unable to find suitable dark field images')
                 is_valid = False
-        logging.info(f'tdf_data_folder = {self.tdf_datz_ref_{i+1}a_folder}')
+        logging.info(f'tdf_data_folder = {self.tdf_data_folder}')
         logging.debug(f'tdf_num_imgs = {self.tdf_num_imgs}')
         logging.debug(f'tdf_img_start = {self.tdf_img_start}')
         
@@ -443,7 +443,7 @@ class Tomo:
         logging.debug(f'tdf_cutoff = {tdf_cutoff}')
         logging.debug(f'tdf_mean = {tdf_mean}')
         np.nan_to_num(self.tdf, copy=False, nan=tdf_mean, posinf=tdf_mean, neginf=0.)
-        msnc.quickImshow(self.tdf, 'dark field')
+#        msnc.quickImshow(self.tdf, title='dark field', save_figname='dark field.png')
 
     def genBright(self):
         """Generate bright field."""
@@ -475,7 +475,7 @@ class Tomo:
 
         # Subtract the dark field
         self.tbf -= self.tdf
-        msnc.quickImshow(self.tbf, 'bright field')
+#        msnc.quickImshow(self.tbf, title='bright field', save_figname='bright field.png')
 
     def setDectectorBounds(self):
         """Set vertical detector bounds for image stack."""
@@ -532,8 +532,8 @@ class Tomo:
         self.img_y_bounds = [0, self.num_columns]
         logging.info(f'img_x_bounds: {self.img_x_bounds}')
         logging.info(f'img_y_bounds: {self.img_y_bounds}')
-        msnc.quickXyplot(range(self.x_low, self.x_upp), tbf_x_sum[self.x_low:self.x_upp], 
-                'sum over theta and y', True)
+#        msnc.quickXyplot(range(self.x_low, self.x_upp), tbf_x_sum[self.x_low:self.x_upp], 
+#                'sum over theta and y', True)
 
     def setZoomOrSkip(self):
         """Set zoom and/or theta skip to reduce memory the requirement for the analysis."""
@@ -544,7 +544,7 @@ class Tomo:
             else:
                 logging.error('skip zoom: illegal value for zoom_perc')
         else:
-            if pyip.inputYesNo('\nDo you want to zoom in to reduce memory requirement (y/n)? '):
+            if pyip.inputYesNo('\nDo you want to zoom in to reduce memory requirement (y/n)? ') == 'yes':
                 self.zoom_perc = pyip.inputInt('Enter zoom percentage [1, 100]: ', min=1, max=100)
         if 'num_theta_skip' in self.config:
             num_theta_skip = int(self.config['num_theta_skip'])
@@ -553,7 +553,7 @@ class Tomo:
             else:
                 logging.error('skip theta skip: illegal value for num_theta_skip')
         else:
-            if pyip.inputYesNo('Do you want to skip thetas to reduce memory requirement (y/n)? '):
+            if pyip.inputYesNo('Do you want to skip thetas to reduce memory requirement (y/n)? ') == 'yes':
                 self.num_theta_skip = pyip.inputInt('Enter the number skip theta interval' + 
                         f' [0, {self.num_thetas-1}]: ', min=0, max=self.num_thetas-1)
         if not msnc.searchConfigFile('config.txt', 'Reduced stack parameters'):
@@ -587,14 +587,16 @@ class Tomo:
         np.save(filepath, stack)
         logging.info('... done!')
 
+    def zoomTomo(self, tomo_stack):
+        """Uniformly zoom a tomo field for a given theta."""
+        return spi.zoom(tomo_stack, 0.01*self.zoom_perc)
+
     def genTomo(self, save_flag = False):
         """Generate tomography fields."""
         tdf = self.tdf[self.img_x_bounds[0]:self.img_x_bounds[1],
                 self.img_y_bounds[0]:self.img_y_bounds[1]]
-        #tdf = np.expand_dims(tdf, 0)
         tbf = self.tbf[self.img_x_bounds[0]:self.img_x_bounds[1],
                 self.img_y_bounds[0]:self.img_y_bounds[1]]
-        #tbf = np.expand_dims(flat, 0)
         if not self.loaded_tomo_sets.size:
             self.loaded_tomo_sets = np.zeros(self.num_tomo_data_sets, dtype=np.int8)
         for i in range(self.num_tomo_data_sets):
@@ -603,33 +605,90 @@ class Tomo:
                 continue;
 
             # Load a stack of tomography images
-            logging.debug('Loading data to get median bright field...')
+            t0 = time()
+            logging.debug('Loading tomo data...')
             tomo_stack = msnc.loadImageStack(self.tomo_data_folders[i], self.tomo_img_starts[i],
                     self.num_thetas, self.num_theta_skip, self.img_x_bounds, self.img_y_bounds)
             tomo_stack = tomo_stack.astype('float64')
+            logging.info(f'loading took {time()-t0:.2f} seconds!')
 
             # Substract the dark field
+            t0 = time()
             with set_numexpr_threads(self.ncore):
                 ne.evaluate('tomo_stack-tdf', out=tomo_stack)
+            logging.info(f'substract the dark field took {time()-t0:.2f} seconds!')
 
             # Normalize
+            t0 = time()
             with set_numexpr_threads(self.ncore):
                 ne.evaluate('tomo_stack/tbf', out=tomo_stack, truediv=True)
+            logging.info(f'normalize took {time()-t0:.2f} seconds!')
 
             # Remove non-positive values and linearize data
+            t0 = time()
             cutoff = 1.e-6
             with set_numexpr_threads(self.ncore):
                 ne.evaluate('where(tomo_stack<cutoff, cutoff, tomo_stack)', out=tomo_stack)
             with set_numexpr_threads(self.ncore):
                 ne.evaluate('-log(tomo_stack)', out=tomo_stack)
+            logging.info(f'remove non-positive values and linearize data took {time()-t0:.2f} seconds!')
 
             # Get rid of nans/infs that may be introduced by normalization
-            np.nan_to_num(tomo_stack, copy=False, nan=0., posinf=0., neginf=0.)
+            t0 = time()
+#            np.nan_to_num(tomo_stack, copy=False, nan=0., posinf=0., neginf=0.)
+            np.where(np.isfinite(tomo_stack), tomo_stack, 0.)
+            logging.info(f'remove nans/infs took {time()-t0:.2f} seconds!')
 
-            # Check data window and "center of mass"
-            #tomo_sum = np.sum(tomo_stack, axis=(0,1))
-            #msnc.quickPlot(tomo_sum)
+            # Downsize tomo stack to smaller size
+            tomo_stack = tomo_stack.astype('float32')
+            msnc.quickImshow(tomo_stack[0,:,:], title=f'red_stack_fullres_{i+1}',
+                    save_figname=f'red_stack_fullres_{i+1}.png')
+            if self.zoom_perc != 100:
+                t0 = time()
+                logging.info(f'zooming in ...')
+#                tomo_stack =spi.zoom(tomo_stack, (1, 0.01*self.zoom_perc, 0.01*self.zoom_perc))
+                tomo_zoom_stack = []
+#                if True or self.ncore == 1:
+                for j in range(tomo_stack.shape[0]):
+                    tomo_zoom = self.zoomTomo(tomo_stack[j,:,:])
+                    tomo_zoom_stack.append(np.expand_dims(tomo_zoom, 0))
+                tomo_stack = np.concatenate([tomo_zoom for tomo_zoom in tomo_zoom_stack])
+#                else:
+#                    logging.info(f'zooming in on {min(self.ncore, tomo_stack.shape[0])} cores ...')
+#                    with mp.Pool(min(self.ncore, tomo_stack.shape[0])) as pool:
+#                        tomo_zoom_stack = pool.map(self.zoomTomo, [tomo_stack[j,:,:]
+#                                for j in range(tomo_stack.shape[0])])
+#                    pool = mp.Pool(min(self.ncore, tomo_stack.shape[0]))
+#                    tomo_zoom_stack = pool.map_async(self.zoomTomo, [tomo_stack[j,:,:] 
+#                            for j in range(tomo_stack.shape[0])]).get()
+#                    pool.close()
+#                    tomo_stack = np.concatenate([np.expand_dims(tomo_zoom, 0) for tomo_zoom in tomo_zoom_stack])
+                logging.info('... done!')
+                msnc.quickImshow(tomo_stack[0,:,:], 
+                        title=f'red_stack_zoom_{self.zoom_perc}p_{i+1}',
+                        save_figname=f'red_stack_zoom_{self.zoom_perc}p_{i+1}.png')
+                logging.info(f'zooming took {time()-t0:.2f} seconds!')
     
+            # Convert tomo_stack from theta,row,column to row,theta,column
+            t0 = time()
+            tomo_stack = np.swapaxes(tomo_stack, 0, 1)
+            logging.info(f'swap axis took {time()-t0:.2f} seconds!')
+
+            # Save tomo stack to file
+            t0 = time()
+            if save_flag:
+                self.saveTomo('red_stack', tomo_stack, i)
+            logging.info(f'saving stack took {time()-t0:.2f} seconds!')
+                
+            # Combine stacks
+            t0 = time()
+            if not self.tomo_sets.size:
+                self.tomo_sets = np.zeros((self.num_tomo_data_sets,
+                        tomo_stack.shape[0],tomo_stack.shape[1],tomo_stack.shape[2]))
+            self.tomo_sets[i,:] = tomo_stack
+            self.loaded_tomo_sets[i] = 1
+            logging.info(f'combining stack took {time()-t0:.2f} seconds!')
+
             # Adjust sample reference height
             self.tomo_ref_heights[i] += self.img_x_bounds[0]*self.pixel_size
             if f'z_ref_{i+1}' in self.config:
@@ -637,31 +696,6 @@ class Tomo:
                         self.tomo_ref_heights[i])
             else:
                 loggin.error(f'Unable to update z_ref_{i+1} in config.txt')
-
-            # Convert tomo_stack from theta,row,column to row,theta,column
-            tomo_stack = np.swapaxes(tomo_stack, 0, 1)
-            msnc.quickImshow(tomo_stack[:,0,:], f'red_stack_fullres_{i+1}')
-
-            # Downsize tomo stack to smaller size
-            if self.zoom_perc != 100:
-                logging.info('zooming in...')
-                tomo_stack = sp.ndimage.zoom(tomo_stack, 
-                        (0.01*self.zoom_perc, 1, 0.01*self.zoom_perc))
-                logging.info('... done!')
-                msnc.quickImshow(tomo_stack[:,0,:], 
-                        f'red_stack_zoom_{self.zoom_perc}p_{i+1}')
-    
-            # Save tomo stack to file
-            tomo_stack = tomo_stack.astype('float32')
-            if save_flag:
-                self.saveTomo('red_stack', tomo_stack, i)
-                
-            # Combine stacks
-            if not self.tomo_sets.size:
-                self.tomo_sets = np.zeros((self.num_tomo_data_sets,
-                        tomo_stack.shape[0],tomo_stack.shape[1],tomo_stack.shape[2]))
-            self.tomo_sets[i,:] = tomo_stack
-            self.loaded_tomo_sets[i] = 1
 
         if not msnc.searchConfigFile('config.txt', 'Analysis progress'):
             self.config = msnc.appendConfigFile('config.txt', '# Analysis progress')
@@ -706,10 +740,12 @@ class Tomo:
             tomo_stack = self.loadTomo('red_stack', i)
             if tomo_stack.size:
                 if self.zoom_perc == 100:
-                    msnc.quickImshow(tomo_stack[:,0,:], f'red_stack_fullres_{i+1}')
+                    msnc.quickImshow(tomo_stack[:,0,:], title=f'red_stack_fullres_{i+1}',
+                            save_figname=f'red_stack_fullres_{i+1}.png')
                 else:
                     msnc.quickImshow(tomo_stack[:,0,:], 
-                            f'red_stack_zoom_{self.zoom_perc}p_{i+1}')
+                            title=f'red_stack_zoom_{self.zoom_perc}p_{i+1}',
+                            save_figname=f'red_stack_zoom_{self.zoom_perc}p_{i+1}.png')
                 # Combine stacks
                 if not self.tomo_sets.size:
                     self.tomo_sets = np.zeros((self.num_tomo_data_sets,
@@ -772,9 +808,9 @@ if __name__ == '__main__':
 #%%============================================================================
 #% Generate tomography fields
 #==============================================================================
-        tomo.genTomo(save_flag = True)
+        tomo.genTomo(save_flag = False)
 
 
 #%%============================================================================
-#input('Press any key to continue')
+        input('Press any key to continue')
 #%%============================================================================

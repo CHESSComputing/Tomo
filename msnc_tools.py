@@ -14,6 +14,7 @@ import pyinputplus as pyip
 import numpy as np
 import imageio as img
 import matplotlib.pyplot as plt
+from time import time
 
 def loadConfigFile(filepath):
     # Ensure the file exists before opening
@@ -126,18 +127,25 @@ def loadImageStack(img_folder, img_start, num_imgs, num_img_skip=0,
             img_x_bounds=None, img_y_bounds=None):
     """Load a set of images and return them as a stack."""
     img_range = np.arange(img_start, img_start+num_imgs, num_img_skip+1)
-    filepath = img_folder + 'nf_%0.6d.tif'%(img_range[0])
-    logging.debug(f'    loading 1/{len(img_range)}: {filepath}')
-    img_read = loadImage(filepath, img_x_bounds, img_y_bounds)
-    img_stack = np.expand_dims(img_read, 0)
-    for i in range(1, len(img_range)):
-        filepath = img_folder + 'nf_%0.6d.tif'%(img_range[i])
+    num_read = len(img_range)
+    if num_read == 1:
+        logging.info(f'Reading {num_read} image ...')
+    else:
+        logging.info(f'Reading {num_read} images ...')
+    t0 = time()
+    img_read_stack = []
+    for i in range(0, num_read):
+        filepath = f'{img_folder}nf_{img_range[i]:06d}.tif'
         if not (i+1)%20:
             logging.info(f'    loading {i+1}/{len(img_range)}: {filepath}')
         else:
             logging.debug(f'    loading {i+1}/{len(img_range)}: {filepath}')
-        img_stack = np.concatenate((img_stack, np.expand_dims(loadImage(
-                filepath, img_x_bounds, img_y_bounds), 0)))
+        img_read = loadImage(filepath, img_x_bounds, img_y_bounds)
+        img_read_stack.append(np.expand_dims(img_read, 0))
+    img_stack = np.concatenate([img_read for img_read in img_read_stack])
+    t1 = time()
+    logging.info(f'... done in {t1-t0:.2f} seconds!')
+    logging.info(f'img_stack shape = {np.shape(img_stack)}')
     return img_stack
 
 def quickImshow(a, title=None, save_figname=None, clear=False, **kwargs):
