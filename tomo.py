@@ -350,11 +350,14 @@ class Tomo:
                     if not tomo_ref_height:
                         pars_missing.append(f'z_pos_{i+1}')
                 if not tomo_data_folder:
+                    tomo_data_folder = None
                     is_valid = False
                 elif type(tomo_data_folder) != str:
                     logging.error('illegal value for tomo_data_folder')
                     tomo_data_folder = None
+                    is_valid = False
                 if not tomo_ref_height:
+                    tomo_ref_height = None
                     is_valid = False
                 elif type(tomo_ref_height) != int and type(tomo_ref_height) != float:
                     logging.error('illegal value for tomo_ref_height')
@@ -808,7 +811,7 @@ if __name__ == '__main__':
 #%%============================================================================
 #% Generate tomography fields
 #==============================================================================
-        tomo.genTomo(save_flag = False)
+        tomo.genTomo(save_flag = True)
 
 
 #%%============================================================================
