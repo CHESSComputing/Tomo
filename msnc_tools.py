@@ -143,8 +143,7 @@ def loadImageStack(img_folder, img_start, num_imgs, num_img_skip=0,
         img_read = loadImage(filepath, img_x_bounds, img_y_bounds)
         img_read_stack.append(np.expand_dims(img_read, 0))
     img_stack = np.concatenate([img_read for img_read in img_read_stack])
-    t1 = time()
-    logging.info(f'... done in {t1-t0:.2f} seconds!')
+    logging.info(f'... done in {time()-t0:.2f} seconds!')
     logging.info(f'img_stack shape = {np.shape(img_stack)}')
     return img_stack
 
@@ -160,6 +159,9 @@ def quickImshow(a, title=None, save_figname=None, clear=False, **kwargs):
     if save_figname:
         plt.savefig(save_figname)
     plt.pause(1)
+
+def quickImsave(filename, a, **kwargs):
+    plt.imsave(filename, a, **kwargs)
 
 def quickPlot(y, title=None, clear=False):
     if clear:

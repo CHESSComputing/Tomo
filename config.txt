@@ -21,13 +21,21 @@ z_pos_2 = -1.69
 z_pos_3 = -0.69
 
 # Reduced stack parameters
-zoom_perc = 100
+zoom_perc = 55
 num_theta_skip = 0
 x_low = 595
 x_upp = 2450
-z_ref_1 = 0.41054999999999997
-z_ref_2 = 1.41055
-z_ref_3 = 2.4105499999999997
+z_ref_1 = 0.0
+z_ref_2 = 1.0
+z_ref_3 = 2.0
 
 # Analysis progress
 pre_processor = True
+find_centers = True
+
+# Calibration center offset info
+center_set_index = 2
+lower_row = 111
+lower_center_offset = -29.5
+upper_row = 908
+upper_center_offset = -27
