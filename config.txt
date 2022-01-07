@@ -25,9 +25,9 @@ zoom_perc = 55
 num_theta_skip = 0
 x_low = 595
 x_upp = 2450
-z_ref_1 = 0.0
-z_ref_2 = 1.0
-z_ref_3 = 2.0
+z_ref_1 = 0.41055
+z_ref_2 = 1.41055
+z_ref_3 = 2.41055
 
 # Analysis progress
 pre_processor = True
@@ -36,6 +36,6 @@ find_centers = True
 # Calibration center offset info
 center_set_index = 2
 lower_row = 111
-lower_center_offset = -29.5
+lower_center_offset = -30.0
 upper_row = 908
-upper_center_offset = -27
+upper_center_offset = -26.0

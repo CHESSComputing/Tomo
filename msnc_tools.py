@@ -14,8 +14,13 @@ import pyinputplus as pyip
 import numpy as np
 import imageio as img
 import matplotlib.pyplot as plt
-from time import time
+#from time import time
 
+def depth_list(L): return isinstance(L, list) and max(map(depth_list, L))+1
+def depth_tuple(T): return isinstance(T, tuple) and max(map(depth_tuple, T))+1
+
+#def depth_list(l,count=0): return count if not isinstance(l,list) else max([depth_list(x,count+1) for x in l])
+#def depth_tuple(l,count=0): return count if not isinstance(l,tuple) else max([depth_tuple(x,count+1) for x in l])
 def loadConfigFile(filepath):
     # Ensure the file exists before opening
     if not os.path.isfile(filepath):
@@ -132,7 +137,7 @@ def loadImageStack(img_folder, img_start, num_imgs, num_img_skip=0,
         logging.info(f'Reading {num_read} image ...')
     else:
         logging.info(f'Reading {num_read} images ...')
-    t0 = time()
+#    t0 = time()
     img_read_stack = []
     for i in range(0, num_read):
         filepath = f'{img_folder}nf_{img_range[i]:06d}.tif'
@@ -143,44 +148,58 @@ def loadImageStack(img_folder, img_start, num_imgs, num_img_skip=0,
         img_read = loadImage(filepath, img_x_bounds, img_y_bounds)
         img_read_stack.append(np.expand_dims(img_read, 0))
     img_stack = np.concatenate([img_read for img_read in img_read_stack])
-    logging.info(f'... done in {time()-t0:.2f} seconds!')
+    logging.info(f'... done!')
+#    logging.info(f'... done in {time()-t0:.2f} seconds!')
     logging.info(f'img_stack shape = {np.shape(img_stack)}')
     return img_stack
 
-def quickImshow(a, title=None, save_figname=None, clear=False, **kwargs):
+def quickImshow(a, title=None, save_figname=None, save_only=False, clear=True, **kwargs):
     if clear:
         if title:
             plt.close(fig=title)
         else:
             plt.clf()
-    plt.ion()
-    plt.figure(title)
-    plt.imshow(a, **kwargs)
-    if save_figname:
-        plt.savefig(save_figname)
-    plt.pause(1)
+    if save_only:
+        if save_figname:
+            plt.imsave(save_figname, a, **kwargs)
+        else:
+            logging.error('Unable to save image (no filename provided)')
+    else:
+        plt.ion()
+        plt.figure(title)
+        if save_figname:
+            plt.savefig(save_figname)
+        plt.imshow(a, **kwargs)
+        plt.pause(1)
 
-def quickImsave(filename, a, **kwargs):
-    plt.imsave(filename, a, **kwargs)
-
-def quickPlot(y, title=None, clear=False):
+def quickPlot(*args, title=None, save_figname=None, save_only=False, clear=True, **kwargs):
     if clear:
         if title:
             plt.close(fig=title)
         else:
             plt.clf()
-    plt.ion()
-    plt.figure(title)
-    plt.plot(y)
-    plt.pause(1)
-
-def quickXyplot(x, y, title=None, clear=False):
-    if clear:
-        if title:
-            plt.close(fig=title)
+    if save_only:
+        plt.figure(title)
+        if depth_tuple(args) > 1:
+           for y in args:
+               plt.plot(*y, **kwargs)
         else:
-            plt.clf()
-    plt.ion()
-    plt.figure(title)
-    plt.plot(x, y)
-    plt.pause(1)
+            plt.plot(*args, **kwargs)
+        if save_figname:
+            plt.savefig(save_figname)
+        else:
+            logging.error('Unable to save image (no filename provided)')
+    else:
+        print(f'args = {args}')
+        print(f'depth = {depth_tuple(args)}')
+        plt.ion()
+        plt.figure(title)
+        if depth_tuple(args) > 1:
+           for y in args:
+               print(f'y = {y} {type(y)}')
+               plt.plot(*y, **kwargs)
+        else:
+            plt.plot(*args, **kwargs)
+        if save_figname:
+            plt.savefig(save_figname)
+        plt.pause(1)
