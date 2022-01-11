@@ -32,9 +32,11 @@ z_ref_3 = 2.41055
 # Analysis progress
 pre_processor = True
 find_centers = True
+check_centers = True
 
 # Calibration center offset info
 center_set_index = 2
+row_bounds = [111, 909]
 lower_row = 111
 lower_center_offset = -30.0
 upper_row = 908
