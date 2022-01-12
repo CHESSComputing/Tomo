@@ -130,6 +130,9 @@ def loadImage(filepath, img_x_bounds=None, img_y_bounds=None):
 def loadImageStack(img_folder, img_start, num_imgs, num_img_skip=0,
         img_x_bounds=None, img_y_bounds=None):
     """Load a set of images and return them as a stack."""
+    logging.debug(f'img_start = {img_start}')
+    logging.debug(f'num_imgs = {num_imgs}')
+    logging.debug(f'num_img_skip = {num_img_skip}')
     img_range = np.arange(img_start, img_start+num_imgs, num_img_skip+1)
     num_read = len(img_range)
     if num_read == 1:

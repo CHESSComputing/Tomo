@@ -1,43 +1,21 @@
 # Locations of tomography dark field images
-tdf_data_folder = '/nfs/chess/raw/2021-2/id1a3/ramshaw-3168-A/df_1mm_0508-1/3/nf/'
+tdf_data_folder = '/nfs/chess/raw/2021-3/id3a/z-3234-A/tenstom_1304r-1/369/nf/'
 
 # Locations of tomography bright field images
-tbf_data_folder = '/nfs/chess/raw/2021-2/id1a3/ramshaw-3168-A/bf_1mm_0508-1/1/nf/'
+tbf_data_folder = '/nfs/chess/raw/2021-3/id3a/z-3234-A/tenstom_1304r-1/370/nf/'
 
 # Locations of tomography images
 num_tomo_data_sets = 3
-tomo_data_folder_1 = '/nfs/chess/raw/2021-2/id1a3/ramshaw-3168-A/tomo_1mm_0508-1/1/nf/'
-tomo_data_folder_2 = '/nfs/chess/raw/2021-2/id1a3/ramshaw-3168-A/tomo_1mm_0508-1/2/nf/'
-tomo_data_folder_3 = '/nfs/chess/raw/2021-2/id1a3/ramshaw-3168-A/tomo_1mm_0508-1/3/nf/'
+tomo_data_folder_1 = '/nfs/chess/raw/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/'
+tomo_data_folder_2 = '/nfs/chess/raw/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/'
+tomo_data_folder_3 = '/nfs/chess/raw/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/'
 
 # Detector ID
-detector_id = 'manta'
+detector_id = 'retiga'
 
 # Scan parameters
-num_thetas = 720
+num_thetas = 1800
 lens_magnification = 5
-z_pos_1 = -2.69
-z_pos_2 = -1.69
-z_pos_3 = -0.69
-
-# Reduced stack parameters
-zoom_perc = 100
-num_theta_skip = 0
-x_low = 595
-x_upp = 2450
-z_ref_1 = 0.41054999999999997
-z_ref_2 = 1.41055
-z_ref_3 = 2.4105499999999997
-
-# Analysis progress
-pre_processor = True
-find_centers = True
-check_centers = True
-
-# Calibration center offset info
-center_set_index = 2
-row_bounds = [203, 1652]
-lower_row = 203
-lower_center_offset = -53.0
-upper_row = 1651
-upper_center_offset = -46.0
+z_pos_1 = -2.603
+z_pos_2 = -1.603
+z_pos_3 = -0.603
