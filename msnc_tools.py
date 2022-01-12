@@ -228,3 +228,56 @@ def quickPlot(*args, title=None, save_fig=False, save_only=False, clear=True, **
         if save_fig:
             plt.savefig(f'{title}.png')
         plt.pause(1)
+
+def selectArrayBounds(a, x_low=None, x_upp=None, title='select array bounds'):
+    """Interactively select the lower and upper data bounds for a numpy array."""
+    if type(a) != np.ndarray or a.ndim != 1:
+        logging.error('Illegal array type or dimension in selectArrayBounds')
+        return None
+    if x_low == None:
+        x_min = 0
+        x_max = a.size
+        while True:
+            quickPlot(range(x_min, x_max), a[x_min:x_max], title=title)
+            zoom_flag = pyip.inputInt('Set lower data bound (0) or zoom in (1)?: ',
+                    min=0, max=1)
+            if zoom_flag:
+                x_min = pyip.inputInt(f'    Set lower zoom index [0, {a.size-1}]: ',
+                        min=0, max=a.size-1)
+                x_max = pyip.inputInt(f'    Set upper zoom index [{x_min+1}, {a.size}]: ',
+                        min=x_min+1, max=a.size)
+            else:
+                x_low = pyip.inputInt(f'    Set lower data bound [0, {a.size-1}]: ',
+                        min=0, max=a.size-1)
+                break
+    else:
+        if type(x_low) != int or x_low < 0 or x_low >= a.size:
+            logging.error('Illegal x_low input in selectArrayBounds')
+            return None
+    if x_upp == None:
+        x_min = x_low+1
+        x_max = a.size
+        while True:
+            quickPlot(range(x_min, x_max), a[x_min:x_max], title=title)
+            zoom_flag = pyip.inputInt('Set upper data bound (0) or zoom in (1)?: ',
+                    min=0, max=1)
+            if zoom_flag:
+                x_min = pyip.inputInt(f'    Set upper zoom index [{x_low+1}, {a.size-1}]: ',
+                        min=x_low+1, max=a.size-1)
+                x_max = pyip.inputInt(f'    Set upper zoom index [{x_min+1}, {a.size}]: ',
+                        min=x_min+1, max=a.size)
+            else:
+                x_upp = pyip.inputInt(f'    Set upper data bound [{x_low+1}, {a.size}]: ',
+                        min=x_low+1, max=a.size)
+                break
+    else:
+        if type(x_upp) != int or x_upp < 0 or x_upp > a.size-1:
+            logging.error('Illegal x_upp input in selectArrayBounds')
+            return None
+    print(f'lower bound = {x_low} (inclusive)\nupper bound = {x_upp} (exclusive)]')
+    bounds = [x_low, x_upp]
+    quickPlot(range(bounds[0], bounds[1]), a[bounds[0]:bounds[1]], title=title)
+    if pyip.inputYesNo('Accept these bounds (y/n)?: ') == 'no':
+        bounds = selectArrayBounds(a, title=title)
+    return bounds
+

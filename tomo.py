@@ -498,48 +498,15 @@ class Tomo:
             sys.exit('Bright field unavailable')
         tbf_x_sum = np.sum(self.tbf, 1)
         x_low = self.config.get('x_low')
-        if x_low == None:
-            x_min = 0
-            x_max = self.tbf.shape[0]
-            while True:
-                msnc.quickPlot(range(x_min, x_max), tbf_x_sum[x_min:x_max], 
-                        title='sum over theta and y')
-                zoom_flag = pyip.inputInt('Set lower image bound (0) or zoom in (1)?: ',
-                        min=0, max=1)
-                if zoom_flag:
-                    x_min = pyip.inputInt(f'    Set lower zoom index [{x_min}, {x_max-1}]: ', 
-                            min=x_min, max=x_max-1)
-                    x_max = pyip.inputInt(f'    Set upper zoom index [{x_min+1}, {x_max}]: ', 
-                            min=x_min+1, max=x_max)
-                else:
-                    x_low = pyip.inputInt(f'    Set lower image bound [{x_min}, {x_max}]: ', 
-                            min=x_min, max=x_max)
-                    break
         x_upp = self.config.get('x_upp')
-        if x_upp == None:
-            x_min = x_low+1
-            x_max = self.tbf.shape[0]
-            while True:
-                msnc.quickPlot(range(x_min, x_max), tbf_x_sum[x_min:x_max], 
-                        title='sum over theta and y')
-                if not pyip.inputInt('Set upper image bound (0) or zoom in (1)?: ',
-                        min=0, max=1):
-                    x_upp = pyip.inputInt(f'    Set upper image bound [{x_min}, {x_max}]: ', 
-                            min=x_min, max=x_max)
-                    break
-                else:
-                    x_min = pyip.inputInt(f'    Set lower zoom index [{x_min}, {x_max-1}]: ', 
-                            min=x_min, max=x_max-1)
-                    x_max = pyip.inputInt(f'    Set upper zoom index [{x_min+1}, {x_max}]: ', 
-                            min=x_min+1, max=x_max)
-
-        self.img_x_bounds = [x_low, x_upp]
+        self.img_x_bounds = msnc.selectArrayBounds(tbf_x_sum, x_low, x_upp, 'sum over theta and y')
         self.img_y_bounds = [0, self.num_columns]
         logging.info(f'img_x_bounds: {self.img_x_bounds}')
         logging.info(f'img_y_bounds: {self.img_y_bounds}')
+        x_low = self.img_x_bounds[0]
+        x_upp = self.img_x_bounds[1]
         msnc.quickPlot(range(x_low, x_upp), tbf_x_sum[x_low:x_upp],
-            title='sum over theta and y', save_fig=self.save_plots,
-            save_only=self.save_plots_only)
+            title='sum over theta and y', save_fig=self.save_plots, save_only=True)
 
         # Update config file
         if not msnc.searchConfigFile('config.txt', 'Reduced stack parameters'):
@@ -836,7 +803,8 @@ class Tomo:
         vmax = np.max(edges[0,:,:])
         vmin = -vmax
         msnc.quickImshow(edges[0,:,:], f'{basename} coolwarm', save_fig=self.save_plots,
-                save_only=self.save_plots_only, cmap='coolwarm', vmin=vmin, vmax=vmax)
+                save_only=self.save_plots_only, cmap='coolwarm')
+                #save_only=self.save_plots_only, cmap='coolwarm', vmin=vmin, vmax=vmax)
         msnc.quickImshow(edges[0,:,:], f'{basename} gray', save_fig=self.save_plots,
                 save_only=self.save_plots_only, cmap='gray', vmin=vmin, vmax=vmax)
         del edges
@@ -869,7 +837,8 @@ class Tomo:
         if pyip.inputYesNo('\nAccept either one of these centers (y/n)?: ') == 'yes':
             del sinogram_T
             del recon_plane
-            return pyip.inputNum(f'    Enter chosen center offset [0, {sinogram.shape[1]}): ')
+            return pyip.inputNum(
+                f'    Enter chosen center offset [{-int(center)}, {int(center)}): ')
 
         while True:
             center_offset_low = pyip.inputInt('\nEnter lower bound for center offset ' + 
@@ -1155,7 +1124,7 @@ class Tomo:
         """Reconstruct tomo stacks."""
         # stack order: stack,row,theta,column
         if self.num_tomo_data_sets != self.loaded_tomo_sets.sum():
-            logging.error('unable to load all tomo sets')
+            logging.error('Unable to load all tomo sets')
             return
         center = self.tomo_sets.shape[3]/2
 
@@ -1233,7 +1202,6 @@ class Tomo:
                         lower_center_offset+(row_bounds[0]-lower_row)*center_slope,
                         upper_center_offset+(row_bounds[1]-1-upper_row)*center_slope,
                         row_bounds[1]-row_bounds[0], endpoint=False)
-                print(f'center_offsets.shape = {center_offsets.shape}')
                 if zoom_perc == 100:
                      title = f'recon stack {i+1} full'
                 else:
@@ -1285,62 +1253,47 @@ class Tomo:
             del tomo_recon
 
         # Combine tomo sets
-        print(f'type tomo_recon_list = {type(tomo_recon_list)} {type(tomo_recon_list[0])}')
-        logging.info(f'combining reconstructed sets ...')
-        t0 = time()
-        tomo_recon_stack = np.concatenate([tomo_recon for tomo_recon in tomo_recon_list])
-        logging.info(f'... done in {time()-t0:.2f} seconds!')
-        print(f'type tomo_recon_stack = {type(tomo_recon_stack)} {type(tomo_recon_stack[0,0,0])}')
-        print(f'tomo_recon_stack shape = {tomo_recon_stack.shape}')
-        msnc.quickPlot(np.sum(tomo_recon_stack, axis=(1,2)),
-                title='tomo recon stack sum yz', save_fig=self.save_plots)
-        resize = False
+        tomosum = 0
+        [tomosum := tomosum+np.sum(tomo_recon, axis=(0,2)) for tomo_recon in tomo_recon_list]
+        msnc.quickPlot(tomosum, title='tomo recon stack sum xz')
         if pyip.inputYesNo(
-                '\nDo you want to chance the image x-bounds (y/n)? ') == 'no':
-            xBounds = [0, tomo_recon_stack.shape[0]]
-        else:
-            xBounds = [pyip.inputInt(
-                    f'    Enter lower x-bound [0, {tomo_recon_stack.shape[0]-1}]: ',
-                    min=0, max=tomo_recon_stack.shape[0]-1)]
-            xBounds.append(pyip.inputInt(
-                    f'    Enter upper x-bound [{xBounds[0]+1}, {tomo_recon_stack.shape[0]}]: ',
-                    min=xBounds[0]+1, max=tomo_recon_stack.shape[0]))
-            if xBounds[0] != 0 or xBounds[1] != tomo_recon_stack.shape[0]:
-                resize = True
-        msnc.quickPlot(np.sum(tomo_recon_stack, axis=(0,2)),
-                title='tomo recon stack sum xz', save_fig=self.save_plots)
-        if pyip.inputYesNo(
-                '\nDo you want to chance the image y-bounds (y/n)? ') == 'no':
+                '\nDo you want to change the image y-bounds (y/n)? ') == 'no':
             yBounds = [0, tomo_recon_stack.shape[1]]
         else:
-            yBounds = [pyip.inputInt(
-                    f'    Enter lower y-bound [0, {tomo_recon_stack.shape[1]-1}]: ',
-                    min=0, max=tomo_recon_stack.shape[1]-1)]
-            yBounds.append(pyip.inputInt(
-                    f'    Enter upper y-bound [{yBounds[0]+1}, {tomo_recon_stack.shape[1]}]: ',
-                    min=yBounds[0]+1, max=tomo_recon_stack.shape[1]))
-            if yBounds[0] != 0 or yBounds[1] != tomo_recon_stack.shape[1]:
-                resize = True
-        msnc.quickPlot(np.sum(tomo_recon_stack, axis=(0,1)),
-                title='tomo recon stack sum xy', save_fig=self.save_plots)
+            yBounds = msnc.selectArrayBounds(tomosum, title='tomo recon stack sum xz')
+        tomosum = 0
+        [tomosum := tomosum+np.sum(tomo_recon, axis=(0,1)) for tomo_recon in tomo_recon_list]
+        msnc.quickPlot(tomosum, title='tomo recon stack sum xy')
         if pyip.inputYesNo(
-                '\nDo you want to chance the image z-bounds (y/n)? ') == 'no':
+                '\nDo you want to change the image z-bounds (y/n)? ') == 'no':
             zBounds = [0, tomo_recon_stack.shape[2]]
         else:
-            zBounds = [pyip.inputInt(
-                    f'    Enter lower z-bound [0, {tomo_recon_stack.shape[2]-1}]: ',
-                    min=0, max=tomo_recon_stack.shape[2]-1)]
-            zBounds.append(pyip.inputInt(
-                    f'    Enter upper z-bound [{zBounds[0]+1}, {tomo_recon_stack.shape[2]}]: ',
-                    min=zBounds[0]+1, max=tomo_recon_stack.shape[2]))
-            if zBounds[0] != 0 or zBounds[1] != tomo_recon_stack.shape[2]:
-                resize = True
-        if resize:
-            tomo_recon_stack = tomo_recon_stack[xBounds[0]:xBounds[1],yBounds[0]:yBounds[1],
-                    zBounds[0]:zBounds[1]]
-            print(f'resized tomo_recon_stack shape = {tomo_recon_stack.shape}')
+            zBounds = msnc.selectArrayBounds(tomosum, title='tomo recon stack sum xy')
+        logging.info(f'combining reconstructed sets ...')
+        t0 = time()
+        tomo_recon_stack = np.concatenate([
+                tomo_recon[:,yBounds[0]:yBounds[1],zBounds[0]:zBounds[1]]
+                for tomo_recon in tomo_recon_list])
+        logging.info(f'... done in {time()-t0:.2f} seconds!')
+        tomosum = 0
+        [tomosum := tomosum+np.sum(tomo_recon_stack, axis=(1,2)) for tomo_recon in tomo_recon_list]
+        msnc.quickPlot(tomosum, title='tomo recon stack sum yz')
+        if pyip.inputYesNo(
+                '\nDo you want to change the image x-bounds (y/n)? ') == 'no':
+            xBounds = [0, tomo_recon_stack.shape[0]]
+        else:
+            xBounds = msnc.selectArrayBounds(tomosum, title='tomo recon stack sum yz')
+            if xBounds[0] != 0 or xBounds[1] != tomo_recon_stack.shape[0]:
+                tomo_recon_stack = tomo_recon_stack[xBounds[0]:xBounds[1],:,:]
+        logging.info(f'resized tomo_recon_stack shape = {tomo_recon_stack.shape}')
+        msnc.quickImshow(tomo_recon_stack[int(tomo_recon_stack.shape[0]/2),:,:],
+                title=f'tomo recon stack xslice{int(tomo_recon_stack.shape[0]/2)}',
+                save_fig=self.save_plots, save_only=self.save_plots_only)
         msnc.quickImshow(tomo_recon_stack[:,int(tomo_recon_stack.shape[1]/2),:],
-                title=f'tomo recon stack slice{int(tomo_recon_stack.shape[1]/2)}',
+                title=f'tomo recon stack yslice{int(tomo_recon_stack.shape[1]/2)}',
+                save_fig=self.save_plots, save_only=self.save_plots_only)
+        msnc.quickImshow(tomo_recon_stack[:,:,int(tomo_recon_stack.shape[2]/2)],
+                title=f'tomo recon stack zslice{int(tomo_recon_stack.shape[2]/2)}',
                 save_fig=self.save_plots, save_only=self.save_plots_only)
 
         # Save tomo sets
@@ -1431,7 +1384,6 @@ if __name__ == '__main__':
 #% Combine tomography sets
 #==============================================================================
     if not tomo.config.get('combine_sets', False):
-        row_bounds = tomo.config.get('row_bounds')
         tomo.loadTomoSets('red_stack')
         tomo.reconstructTomoSets()
 
