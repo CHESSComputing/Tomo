@@ -1,0 +1,21 @@
+# Locations of tomography dark field images
+tdf_data_folder = '/nfs/chess/raw/2021-2/id1a3/ramshaw-3168-A/df_1mm_0508-1/3/nf/'
+
+# Locations of tomography bright field images
+tbf_data_folder = '/nfs/chess/raw/2021-2/id1a3/ramshaw-3168-A/bf_1mm_0508-1/1/nf/'
+
+# Locations of tomography images
+num_tomo_data_sets = 3
+tomo_data_folder_1 = '/nfs/chess/raw/2021-2/id1a3/ramshaw-3168-A/tomo_1mm_0508-1/1/nf/'
+tomo_data_folder_2 = '/nfs/chess/raw/2021-2/id1a3/ramshaw-3168-A/tomo_1mm_0508-1/2/nf/'
+tomo_data_folder_3 = '/nfs/chess/raw/2021-2/id1a3/ramshaw-3168-A/tomo_1mm_0508-1/3/nf/'
+
+# Detector
+detector_id = 'manta'
+lens_magnification = 5
+
+# Scan parameters
+num_thetas = 720
+z_pos_1 = -2.69
+z_pos_2 = -1.69
+z_pos_3 = -0.69

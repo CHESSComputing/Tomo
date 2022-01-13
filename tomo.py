@@ -284,50 +284,8 @@ class Tomo:
             tdf_files = [f for f in os.listdir(self.tdf_data_folder)
                 if os.path.isfile(os.path.join(self.tdf_data_folder, f)) and 
                         f.endswith('.tif') and indexRegex.search(f)]
-            if len(tdf_files) == 1:
-                self.tdf_num_imgs = msnc.getNumFiles(tdf_files, 'dark field image', 1)
-                if self.tdf_num_imgs:
-                    tdf_img_start = indexRegex.search(tdf_files[0]).group()
-                    if tdf_img_start != None:
-                        self.tdf_img_start = int(tdf_img_start)
-            elif len(tdf_files) > 1:
-                tdf_files.sort()
-                first_index = indexRegex.search(tdf_files[0]).group()
-                last_index = indexRegex.search(tdf_files[-1]).group()
-                if first_index == None or last_index == None:
-                    logging.error('Unable to find suitable dark field images')
-                    is_valid = False
-                else:
-                    first_index = int(first_index)
-                    last_index = int(last_index)
-                    if len(tdf_files) != last_index-first_index+1:
-                        logging.warning('Non-consecutive set of indices for dark field images!')
-                    logging.info(f'Number of available dark field images: {len(tdf_files)}') 
-                    logging.info(f'Index range of available dark field images: [{first_index}, {last_index}]')
-                    choice1 = f'Use all ([{first_index}, {last_index}])'
-                    choice2 = 'Pick a starting index offset and a number of images'
-                    choice3 = 'Pick the first and last index'
-                    menuchoice = pyip.inputMenu([choice1, choice2, choice3], numbered=True)
-                    if menuchoice == choice1:
-                        self.tdf_num_imgs = len(tdf_files)
-                        self.tdf_img_start = first_index
-                    elif menuchoice == choice2:
-                        self.tdf_img_start = pyip.inputInt('Enter the starting index offset' +
-                                f'[0, {last_index-first_index}]: ',
-                                min=0, max=last_index-first_index)+first_index
-                        if self.tdf_img_start == last_index:
-                            self.tdf_num_imgs = 1
-                        else:
-                            self.tdf_num_imgs = pyip.inputInt('Enter the number of images' +
-                                    f'[1, {last_index-self.tdf_img_start+1}]: ',
-                                    min=1, max=last_index-self.tdf_img_start+1)
-                    elif menuchoice == choice3:
-                        self.tdf_img_start = pyip.inputInt('Enter the starting index ' +
-                                f'[{first_index}, {last_index}]: ', min=first_index, max=last_index)
-                        self.tdf_num_imgs = pyip.inputInt('Enter the lastindex ' +
-                                f'[{self.tdf_img_start}, {last_index}]: ',
-                                min=self.tdf_img_start, max=last_index)-self.tdf_img_start+1
-            if not self.tdf_num_imgs or not self.tdf_img_start:
+            (self.tdf_img_start, self.tdf_num_imgs) = msnc.selectFiles(tdf_files, 'dark field')
+            if not self.tdf_img_start or not self.tdf_num_imgs:
                 logging.error('Unable to find suitable dark field images')
                 is_valid = False
         logging.info(f'tdf_data_folder = {self.tdf_data_folder}')
@@ -344,50 +302,8 @@ class Tomo:
             tbf_files = [f for f in os.listdir(self.tbf_data_folder)
                 if os.path.isfile(os.path.join(self.tbf_data_folder, f)) and 
                         f.endswith('.tif') and indexRegex.search(f)]
-            if len(tbf_files) == 1:
-                self.tbf_num_imgs = msnc.getNumFiles(tbf_files, 'bright field image', 1)
-                if self.tbf_num_imgs:
-                    tbf_img_start = indexRegex.search(tbf_files[0]).group()
-                    if tbf_img_start != None:
-                        self.tbf_img_start = int(tbf_img_start)
-            elif len(tbf_files) > 1:
-                tbf_files.sort()
-                first_index = indexRegex.search(tbf_files[0]).group()
-                last_index = indexRegex.search(tbf_files[-1]).group()
-                if first_index == None or last_index == None:
-                    logging.error('Unable to find suitable bright field images')
-                    is_valid = False
-                else:
-                    first_index = int(first_index)
-                    last_index = int(last_index)
-                    if len(tbf_files) != last_index-first_index+1:
-                        logging.warning('Non-consecutive set of indices for bright field images!')
-                    logging.info(f'Number of available bright field images: {len(tbf_files)}') 
-                    logging.info(f'Index range of available bright field images: [{first_index}, {last_index}]')
-                    choice1 = f'Use all ([{first_index}, {last_index}])'
-                    choice2 = 'Pick a starting index offset and a number of images'
-                    choice3 = 'Pick the first and last index'
-                    menuchoice = pyip.inputMenu([choice1, choice2, choice3], numbered=True)
-                    if menuchoice == choice1:
-                        self.tbf_num_imgs = len(tbf_files)
-                        self.tbf_img_start = first_index
-                    elif menuchoice == choice2:
-                        self.tbf_img_start = pyip.inputInt('Enter the starting index offset' +
-                                f'[0, {last_index-first_index}]: ',
-                                min=0, max=last_index-first_index)+first_index
-                        if self.tbf_img_start == last_index:
-                            self.tbf_num_imgs = 1
-                        else:
-                            self.tbf_num_imgs = pyip.inputInt('Enter the number of images' +
-                                    f'[1, {last_index-self.tbf_img_start+1}]: ',
-                                    min=1, max=last_index-self.tbf_img_start+1)
-                    elif menuchoice == choice3:
-                        self.tbf_img_start = pyip.inputInt('Enter the starting index ' +
-                                f'[{first_index}, {last_index}]: ', min=first_index, max=last_index)
-                        self.tbf_num_imgs = pyip.inputInt('Enter the lastindex ' +
-                                f'[{self.tbf_img_start}, {last_index}]: ',
-                                min=self.tbf_img_start, max=last_index)-self.tbf_img_start+1
-            if not self.tbf_num_imgs or not self.tbf_img_start:
+            (self.tbf_img_start, self.tbf_num_imgs) = msnc.selectFiles(tbf_files, 'bright field')
+            if not self.tbf_img_start or not self.tbf_num_imgs:
                 logging.error('Unable to find suitable bright field images')
                 is_valid = False
         logging.info(f'tbf_data_folder = {self.tbf_data_folder}')
@@ -446,42 +362,9 @@ class Tomo:
                     tomo_files = [f for f in os.listdir(tomo_data_folder)
                         if os.path.isfile(os.path.join(tomo_data_folder, f)) and 
                                 f.endswith('.tif') and indexRegex.search(f)]
-                    if len(tomo_files) < self.num_thetas:
-                        logging.error('Inconsistent number of tomo images:' +
-                                f'\n    number of thetas = {self.num_thetas}' + 
-                                f'\n    number of available tomo images= {tomo_num_imgs}')
-                        is_valid = False
-                    elif len(tomo_files) >= self.num_thetas:
-                        tomo_files.sort()
-                        first_index = indexRegex.search(tomo_files[0]).group()
-                        last_index = indexRegex.search(tomo_files[-1]).group()
-                        if first_index == None or last_index == None:
-                            logging.error('Unable to find suitable tomo images')
-                            is_valid = False
-                        elif int(last_index)-int(first_index)+1 < self.num_thetas:
-                            logging.error('Inconsistent number of available tomo images:' +
-                                    f'\n    number of thetas = {self.num_thetas}' + 
-                                    '\n    number of available tomo images = ' +
-                                    f'{int(last_index)-int(first_index)+1}')
-                            is_valid = False
-                        else:
-                            first_index = int(first_index)
-                            last_index = int(last_index)
-                            if len(tomo_files) != last_index-first_index+1:
-                                logging.warning('Non-consecutive set of indices for tomo images!')
-                            logging.info(f'Number of available tomo images: {len(tomo_files)}') 
-                            logging.info(f'Index range of available tomo images: [{first_index}, {last_index}]')
-                            choice1 = f'Use ([{first_index}, {first_index+self.num_thetas-1}])'
-                            choice2 = 'Pick a starting index offset'
-                            menuchoice = pyip.inputMenu([choice1, choice2], numbered=True)
-                            if menuchoice == choice1:
-                                tomo_img_start = first_index
-                            elif menuchoice == choice2:
-                                tomo_img_start = pyip.inputInt('Enter the starting index offset' +
-                                        f'[0, {last_index-first_index-self.num_thetas}]: ',
-                                        min=0, max=last_index-first_index-self.num_thetas)+first_index
-                            tomo_num_imgs = self.num_thetas
-                    if not tomo_num_imgs or not tomo_img_start:
+                    (tomo_img_start, tomo_num_imgs) = msnc.selectFiles(tomo_files,
+                            'tomo', self.num_thetas)
+                    if not tomo_img_start or not tomo_num_imgs:
                         logging.error('Unable to find suitable tomo images')
                         is_valid = False
                 logging.debug(f'tomo_num_imgs = {tomo_num_imgs}')

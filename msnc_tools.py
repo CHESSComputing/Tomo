@@ -89,21 +89,82 @@ def addtoConfigFile(config_filepath, search_string, newlines):
     # update config in memory
     return loadConfigFile(config_filepath)
 
-def getNumFiles(files, file_type, num_angles = None):
+def selectFiles(files, name=None, num_required=None):
+    indexRegex = re.compile(r'\d+')
     num_files = len(files)
-    # RV assume that the order is correct and that the angles match the images
-    if num_angles is not None and num_files >= num_angles:
-        return num_angles
-    if num_files:
-        if num_files == 1:
-            logging.debug(f'found {num_files} {file_type}')
+    if type(name) != str:
+        name = ' '
+    else:
+        name = f' {name} '
+    if len(files) < 1:
+        logging.warning('No available' + name + 'files')
+        return (0, 0)
+    if num_required == None:
+        if len(files) == 1:
+            first_index = indexRegex.search(files[0]).group()
+            if first_index == None:
+                logging.error('Unable to find correctly indexed' + name + 'images')
+                return (0, 0)
+            return (int(first_index), 1)
+    else:
+        if type(num_required) != int or num_required < 1:
+            logging.error(f'Illegal value of num_required ({num_required}, ' +
+                    f'{type(num_required)})')
+            return (0, 0)
+        if num_files < num_required:
+            logging.error('Unable to find the required' + name +
+                    f'images ({num_files} out of {num_required})')
+            return (0, 0)
+    files.sort()
+    first_index = indexRegex.search(files[0]).group()
+    last_index = indexRegex.search(files[-1]).group()
+    if first_index == None or last_index == None:
+        logging.error('Unable to find correctly indexed' + name + 'images')
+        return (0, 0)
+    else:
+        first_index = int(first_index)
+        last_index = int(last_index)
+        if len(files) != last_index-first_index+1:
+            logging.warning('Non-consecutive set of indices for' + name + 'images')
+        if num_required and last_index-first_index+1 < num_required:
+            logging.error('Unable to find the required' + name +
+                    f'images ({last_index-first_index+1} out of {num_required})')
+            return (0, 0)
+        print('Number of available' + name + f'images: {len(files)}')
+        print('Index range of available' + name + f'images: [{first_index}, ' +
+                f'{last_index}]')
+        if num_required == None:
+            use_all = f'Use all ([{first_index}, {last_index}])'
+            pick_offset = 'Pick a starting index offset and a number of images'
+            pick_bounds = 'Pick the first and last index'
+            menuchoice = pyip.inputMenu([use_all, pick_offset, pick_bounds], numbered=True)
+            if menuchoice == use_all:
+                return (first_index, len(files))
+            elif menuchoice == pick_offset:
+                first_index += pyip.inputInt('Enter the starting index offset' +
+                        f' [0, {last_index-first_index}]: ', min=0,
+                        max=last_index-first_index)
+                if first_index == last_index:
+                    return (first_index, 1)
+                else:
+                    return (first_index, pyip.inputInt('Enter the number of images' +
+                            f' [1, {last_index-first_index+1}]: ', min=1,
+                            max=last_index-first_index+1))
+            else:
+                first_index = pyip.inputInt('Enter the starting index ' +
+                        f'[{first_index}, {last_index}]: ', min=first_index, max=last_index)
+                return (first_index, pyip.inputInt('Enter the last index ' +
+                        f'[{first_index}, {last_index}]: ', min=first_index,
+                        max=last_index)-first_index+1)
         else:
-            logging.debug(f'found {num_files} {file_type}s')
-            num_files = pyip.inputInt('How many would you like to use (enter 0 for all)?: ', 
-                    min=0, max=num_files)
-            if not num_files:
-                num_files = len(files)
-    return num_files
+            use_all = f'Use ([{first_index}, {first_index+num_required-1}])'
+            pick_offset = 'Pick a starting index offset'
+            menuchoice = pyip.inputMenu([use_all, pick_offset], numbered=True)
+            if menuchoice == pick_offset:
+                first_index += pyip.inputInt('Enter the starting index offset' +
+                        f'[0, {last_index-first_index-num_required}]: ',
+                        min=0, max=last_index-first_index-num_required)
+            return (first_index, num_required)
 
 def loadImage(filepath, img_x_bounds=None, img_y_bounds=None):
     """Load a single image from file."""

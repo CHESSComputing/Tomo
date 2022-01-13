@@ -3,4 +3,4 @@ detector:
   pixels:
     rows: 2048
     columns: 2048
-    size: [0.00148, 0.00148]
+    size: [0.0074, 0.0074]
