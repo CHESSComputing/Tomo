@@ -765,6 +765,7 @@ class Tomo:
         del sinogram
 
         # Removing ring artifacts
+        # RV parameters for the denoise, gaussian, and ring removal will be different for different feature sizes
         t0 = time()
 #        recon_sinogram = filters.gaussian(recon_sinogram, 3.0)
         recon_sinogram = spi.gaussian_filter(recon_sinogram, 0.5)
@@ -775,6 +776,7 @@ class Tomo:
         return recon_clean
 
     def _plotEdgesOnePlane(self, recon_plane, basename, weight=0.001):
+        # RV parameters for the denoise, gaussian, and ring removal will be different for different feature sizes
         edges = denoise_tv_chambolle(recon_plane, weight = weight)
         vmax = np.max(edges[0,:,:])
         vmin = -vmax
