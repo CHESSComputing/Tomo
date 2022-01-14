@@ -466,16 +466,35 @@ class Tomo:
         msnc.quickImshow(self.tbf, title='bright field', save_fig=self.save_plots,
                 save_only=self.save_plots_only)
 
-    def setDectectorBounds(self):
+    def setDetectorBounds(self):
         """Set vertical detector bounds for image stack."""
+        # Check reference heights
+        if self.pixel_size == None:
+            sys.exit('pixel_size unavailable')
         if 'x_low' not in self.config or 'x_upp' not in self.config:
             print('\nSelect image bounds from bright field')
         if not self.tbf.size:
             sys.exit('Bright field unavailable')
+        print(f'tbf.shape = {self.tbf.shape}')
+        num_x_min = None
+        if self.num_tomo_data_sets > 1:
+            delta_z = self.tomo_ref_heights[1]-self.tomo_ref_heights[0]
+            for i in range(2,self.num_tomo_data_sets):
+                delta_z = min(delta_z, self.tomo_ref_heights[i]-self.tomo_ref_heights[i-1])
+            print(f'delta_z = {delta_z}')
+            num_x_min = int(delta_z/self.pixel_size)+1
+            print(f'num_x_min = {num_x_min}')
+            if num_x_min > self.tbf.shape[0]:
+                logging.warning('Image bounds and pixel size prevent seamless stacking')
+                num_x_min = self.tbf.shape[0]
         tbf_x_sum = np.sum(self.tbf, 1)
         x_low = self.config.get('x_low')
         x_upp = self.config.get('x_upp')
-        self.img_x_bounds = msnc.selectArrayBounds(tbf_x_sum, x_low, x_upp, 'sum over theta and y')
+        msnc.quickImshow(self.tbf, title='bright field')
+        self.img_x_bounds = msnc.selectArrayBounds(tbf_x_sum, x_low, x_upp,
+                num_x_min, 'sum over theta and y')
+        if num_x_min != None and self.img_x_bounds[1]-self.img_x_bounds[0]+1 < num_x_min:
+            logging.warning('Image bounds and pixel size prevent seamless stacking')
         self.img_y_bounds = [0, self.num_columns]
         logging.info(f'img_x_bounds: {self.img_x_bounds}')
         logging.info(f'img_y_bounds: {self.img_y_bounds}')
@@ -1332,7 +1351,7 @@ if __name__ == '__main__':
 #%%============================================================================
 #% Set vertical detector bounds for image stack
 #==============================================================================
-        tomo.setDectectorBounds()
+        tomo.setDetectorBounds()
 
 #%%============================================================================
 #% Set zoom and/or theta skip to reduce memory the requirement

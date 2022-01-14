@@ -130,7 +130,7 @@ def selectFiles(files, name=None, num_required=None):
             logging.error('Unable to find the required' + name +
                     f'images ({last_index-first_index+1} out of {num_required})')
             return (0, 0)
-        print('Number of available' + name + f'images: {len(files)}')
+        print('\nNumber of available' + name + f'images: {len(files)}')
         print('Index range of available' + name + f'images: [{first_index}, ' +
                 f'{last_index}]')
         if num_required == None:
@@ -293,49 +293,58 @@ def quickPlot(*args, title=None, save_fig=False, save_only=False, clear=True, **
             plt.savefig(f'{title}.png')
         plt.pause(1)
 
-def selectArrayBounds(a, x_low=None, x_upp=None, title='select array bounds'):
+def selectArrayBounds(a, x_low=None, x_upp=None, num_x_min=None,
+        title='select array bounds'):
     """Interactively select the lower and upper data bounds for a numpy array."""
     if type(a) != np.ndarray or a.ndim != 1:
         logging.error('Illegal array type or dimension in selectArrayBounds')
         return None
+    if num_x_min == None:
+        num_x_min = 1
+    else:
+        if num_x_min < 2 or num_x_min > a.size:
+            logging.warning('Illegal input for num_x_min in selectArrayBounds, input ignored')
+            num_x_min = 1
     if x_low == None:
         x_min = 0
         x_max = a.size
+        x_low_max = a.size-num_x_min
         while True:
             quickPlot(range(x_min, x_max), a[x_min:x_max], title=title)
             zoom_flag = pyip.inputInt('Set lower data bound (0) or zoom in (1)?: ',
                     min=0, max=1)
             if zoom_flag:
-                x_min = pyip.inputInt(f'    Set lower zoom index [0, {a.size-1}]: ',
-                        min=0, max=a.size-1)
-                x_max = pyip.inputInt(f'    Set upper zoom index [{x_min+1}, {a.size}]: ',
-                        min=x_min+1, max=a.size)
+                x_min = pyip.inputInt(f'    Set lower zoom index [0, {x_low_max}]: ',
+                        min=0, max=x_low_max)
+                x_max = pyip.inputInt(f'    Set upper zoom index [{x_min+1}, {x_low_max+1}]: ',
+                        min=x_min+1, max=x_low_max+1)
             else:
-                x_low = pyip.inputInt(f'    Set lower data bound [0, {a.size-1}]: ',
-                        min=0, max=a.size-1)
+                x_low = pyip.inputInt(f'    Set lower data bound [0, {x_low_max}]: ',
+                        min=0, max=x_low_max)
                 break
     else:
         if type(x_low) != int or x_low < 0 or x_low >= a.size:
             logging.error('Illegal x_low input in selectArrayBounds')
             return None
     if x_upp == None:
-        x_min = x_low+1
+        x_min = x_low+num_x_min
         x_max = a.size
+        x_upp_min = x_min
         while True:
             quickPlot(range(x_min, x_max), a[x_min:x_max], title=title)
             zoom_flag = pyip.inputInt('Set upper data bound (0) or zoom in (1)?: ',
                     min=0, max=1)
             if zoom_flag:
-                x_min = pyip.inputInt(f'    Set upper zoom index [{x_low+1}, {a.size-1}]: ',
-                        min=x_low+1, max=a.size-1)
+                x_min = pyip.inputInt(f'    Set upper zoom index [{x_upp_min}, {a.size-1}]: ',
+                        min=x_upp_min, max=a.size-1)
                 x_max = pyip.inputInt(f'    Set upper zoom index [{x_min+1}, {a.size}]: ',
                         min=x_min+1, max=a.size)
             else:
-                x_upp = pyip.inputInt(f'    Set upper data bound [{x_low+1}, {a.size}]: ',
-                        min=x_low+1, max=a.size)
+                x_upp = pyip.inputInt(f'    Set upper data bound [{x_upp_min}, {a.size}]: ',
+                        min=x_upp_min, max=a.size)
                 break
     else:
-        if type(x_upp) != int or x_upp < 0 or x_upp > a.size-1:
+        if type(x_upp) != int or x_upp < 1 or x_upp > a.size:
             logging.error('Illegal x_upp input in selectArrayBounds')
             return None
     print(f'lower bound = {x_low} (inclusive)\nupper bound = {x_upp} (exclusive)]')

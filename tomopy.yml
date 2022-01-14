@@ -1,0 +1,12 @@
+name: tomopy
+channels:
+  - astra-toolbox
+  - conda-forge
+  - defaults
+dependencies:
+  - astra-toolbox==2.0.0
+  - pip==21.3.1
+  - python==3.9.5
+  - tomopy==1.11.0
+  - pip:
+    - pyinputplus==0.2.12
