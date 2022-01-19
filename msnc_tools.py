@@ -20,6 +20,14 @@ from time import time
 def depth_list(L): return isinstance(L, list) and max(map(depth_list, L))+1
 def depth_tuple(T): return isinstance(T, tuple) and max(map(depth_tuple, T))+1
 
+def tail_int(string):
+    indexRegex = re.compile(r'\d+$')
+    mo = indexRegex.search(string)
+    if mo == None:
+        return None
+    else:
+        return int(mo.group())
+
 def loadConfigFile(filepath):
     # Ensure the file exists before opening
     if not os.path.isfile(filepath):
@@ -89,8 +97,10 @@ def addtoConfigFile(config_filepath, search_string, newlines):
     # update config in memory
     return loadConfigFile(config_filepath)
 
-def selectFiles(files, name=None, num_required=None):
+def selectFiles(folder, name=None, num_required=None):
     indexRegex = re.compile(r'\d+')
+    files = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f)) and
+            f.endswith('.tif') and indexRegex.search(f)]
     num_files = len(files)
     if type(name) != str:
         name = ' '
