@@ -219,8 +219,8 @@ def loadImageStack(img_folder, img_start, num_imgs, num_img_skip=0,
         else:
             logging.debug(f'    loading {i+1}/{len(img_range)}: {filepath}')
         img_read = loadImage(filepath, img_x_bounds, img_y_bounds)
-        img_read_stack.append(np.expand_dims(img_read, 0))
-    img_stack = np.concatenate([img_read for img_read in img_read_stack])
+        img_read_stack.append(img_read)
+    img_stack = np.stack([img_read for img_read in img_read_stack])
     logging.info(f'... done in {time()-t0:.2f} seconds!')
     logging.debug(f'img_stack shape = {np.shape(img_stack)}')
     del img_read_stack, img_read, img_range
