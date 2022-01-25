@@ -20,7 +20,7 @@ from time import time
 def depth_list(L): return isinstance(L, list) and max(map(depth_list, L))+1
 def depth_tuple(T): return isinstance(T, tuple) and max(map(depth_tuple, T))+1
 
-def tail_int(string):
+def get_trailing_int(string):
     indexRegex = re.compile(r'\d+$')
     mo = indexRegex.search(string)
     if mo == None:
@@ -29,73 +29,90 @@ def tail_int(string):
         return int(mo.group())
 
 def loadConfigFile(filepath):
-    # Ensure the file exists before opening
+    #RV eval can be a security risk, replace at one point
     if not os.path.isfile(filepath):
-        logging.error(f'file does not exist: {filepath}')
-        return
+        logging.error(f'{filepath} does not exist')
+        return {}
     with open(filepath, 'r') as f:
         lines = f.read().splitlines()
-    config = {}
-    for line in lines:
-        line = line.split('#')[0]
-        if '=' in line:
-            key, value = tuple(line.split('='))
-            key = key.replace(' ', '')
-            config[key] = eval(value)
-    return config
+    return {item[0].strip():eval(item[1]) for item in
+            [line.split('#')[0].split('=') for line in lines if '=' in line.split('#')[0]]}
 
-def searchConfigFile(config_filepath, search_string):
-    with open(config_filepath, 'r') as f:
+def searchConfigFile(filepath, search_string):
+    if not os.path.isfile(filepath):
+        logging.error(f'{filepath} does not exist')
+        return False
+    with open(filepath, 'r') as f:
         lines = f.read()
         if search_string in lines:
             return True
     return False
 
-def appendConfigFile(config_filepath, newlines):
-    with open(config_filepath, 'a') as f:
+def appendConfigFile(filepath, newlines):
+    with open(filepath, 'a') as f:
         f.write('\n')
         for line in newlines.splitlines():
             f.write(f'{line}\n')
-    # update config in memory
-    return loadConfigFile(config_filepath)
+    # Update config in memory
+    return loadConfigFile(filepath)
 
-def updateConfigFile(config_filepath, keyword, keyvalue):
-    with open(config_filepath, 'r') as f:
-        lines = f.read().splitlines()
-    update = False
-    for index in range(len(lines)):
-        line = lines[index].split('#')[0]
-        if keyword in line:
-            key, value = tuple(line.split('='))
-            key = key.replace(' ', '')
-            lines[index] = f'{key} = {keyvalue}'
-            update = True
-            break
-    if not update:
-        lines += ['', f'{keyword} = {keyvalue}']
-    with open(config_filepath, 'w') as f: 
+def updateConfigFile(filepath, key, value, search_string=None, header=None):
+    if not os.path.isfile(filepath):
+        logging.error(f'file does not exist: {filepath}')
+        lines = []
+    else:
+        with open(filepath, 'r') as f:
+            lines = f.read().splitlines()
+    config = {item[0].strip():eval(item[1]) for item in
+            [line.split('#')[0].split('=') for line in lines if '=' in line.split('#')[0]]}
+    if type(key) != str:
+        logging.error(f'Illegal key input type in updateConfigFile ({type(key)})')
+        return config
+    if type(value) == str:
+        newline = f"{key} = '{value}'"
+    else:
+        newline = f'{key} = {value}'
+    if key in config.keys():
+        # Update key with value
+        for index,line in enumerate(lines):
+            if '=' in line:
+                item = line.split('#')[0].split('=')
+                if item[0].strip() == key:
+                    lines[index] = newline
+                    break
+    else:
+        # Insert new key/value pair
+        if search_string != None:
+            if type(search_string) == str:
+                search_string = [search_string]
+            elif not (type(search_string) == tuple or type(search_string) == list):
+                logging.error('Illegal search_string input in updateConfigFile'+
+                        f'(type{search_string})')
+                search_string = None
+        update_flag = False
+        if search_string != None:
+            indices = [[index for index,line in enumerate(lines) if item in line]
+                    for item in search_string]
+            for i,index in enumerate(indices):
+                if index:
+                    if len(search_string) > 1 and key < search_string[i]:
+                        lines.insert(index[0], newline)
+                    else:
+                        lines.insert(index[0]+1, newline)
+                    update_flag = True
+                    break
+        if not update_flag:
+            if type(header) == str:
+                lines += ['', header, newline]
+            else:
+                lines += ['', newline]
+    # Write updated config file
+    with open(filepath, 'w') as f:
         for line in lines:
             f.write(f'{line}\n')
-    # update config in memory
-    return loadConfigFile(config_filepath)
-
-def addtoConfigFile(config_filepath, search_string, newlines):
-    with open(config_filepath, 'r') as f:
-        lines = f.read().splitlines()
-    update = False
-    for index in range(len(lines)):
-        line = lines[index]
-        if search_string in line:
-            lines = lines[:index+1] + newlines.splitlines() + lines[index+1:]
-            update = True
-            break
-    if not update:
-        lines += [''] + newlines.splitlines()
-    with open(config_filepath, 'w') as f:
-        for line in lines:
-            f.write(f'{line}\n')
-    # update config in memory
-    return loadConfigFile(config_filepath)
+    # Return updated config
+    config['key'] = value
+    return config
 
 def selectFiles(folder, name=None, num_required=None):
     indexRegex = re.compile(r'\d+')
@@ -107,41 +124,41 @@ def selectFiles(folder, name=None, num_required=None):
     else:
         name = f' {name} '
     if len(files) < 1:
-        logging.warning('No available' + name + 'files')
-        return (0, 0)
+        logging.warning('No available'+name+'files')
+        return (0, 0, 0)
     if num_required == None:
         if len(files) == 1:
             first_index = indexRegex.search(files[0]).group()
             if first_index == None:
-                logging.error('Unable to find correctly indexed' + name + 'images')
-                return (0, 0)
-            return (int(first_index), 1)
+                logging.error('Unable to find correctly indexed'+name+'images')
+                return (0, 0, 0)
+            return (int(first_index), 0, 1)
     else:
         if type(num_required) != int or num_required < 1:
-            logging.error(f'Illegal value of num_required ({num_required}, ' +
+            logging.error(f'Illegal value of num_required ({num_required}, '+
                     f'{type(num_required)})')
-            return (0, 0)
+            return (0, 0, 0)
         if num_files < num_required:
-            logging.error('Unable to find the required' + name +
+            logging.error('Unable to find the required'+name+
                     f'images ({num_files} out of {num_required})')
-            return (0, 0)
+            return (0, 0, 0)
     files.sort()
     first_index = indexRegex.search(files[0]).group()
     last_index = indexRegex.search(files[-1]).group()
     if first_index == None or last_index == None:
-        logging.error('Unable to find correctly indexed' + name + 'images')
-        return (0, 0)
+        logging.error('Unable to find correctly indexed'+name+'images')
+        return (0, 0, 0)
     else:
         first_index = int(first_index)
         last_index = int(last_index)
         if len(files) != last_index-first_index+1:
-            logging.warning('Non-consecutive set of indices for' + name + 'images')
+            logging.warning('Non-consecutive set of indices for'+name+'images')
         if num_required and last_index-first_index+1 < num_required:
-            logging.error('Unable to find the required' + name +
+            logging.error('Unable to find the required'+name+
                     f'images ({last_index-first_index+1} out of {num_required})')
-            return (0, 0)
-        print('\nNumber of available' + name + f'images: {len(files)}')
-        print('Index range of available' + name + f'images: [{first_index}, ' +
+            return (0, 0, 0)
+        print('\nNumber of available'+name+f'images: {len(files)}')
+        print('Index range of available'+name+f'images: [{first_index}, '+
                 f'{last_index}]')
         if num_required == None:
             use_all = f'Use all ([{first_index}, {last_index}])'
@@ -149,32 +166,36 @@ def selectFiles(folder, name=None, num_required=None):
             pick_bounds = 'Pick the first and last index'
             menuchoice = pyip.inputMenu([use_all, pick_offset, pick_bounds], numbered=True)
             if menuchoice == use_all:
-                return (first_index, len(files))
+                return (first_index, 0, len(files))
             elif menuchoice == pick_offset:
-                first_index += pyip.inputInt('Enter the starting index offset' +
+                offset = pyip.inputInt('Enter the starting index offset'+
                         f' [0, {last_index-first_index}]: ', min=0,
                         max=last_index-first_index)
+                first_index += offset
                 if first_index == last_index:
-                    return (first_index, 1)
+                    return (first_index, offset, 1)
                 else:
-                    return (first_index, pyip.inputInt('Enter the number of images' +
+                    return (first_index, offset, pyip.inputInt('Enter the number of images'+
                             f' [1, {last_index-first_index+1}]: ', min=1,
                             max=last_index-first_index+1))
             else:
-                first_index = pyip.inputInt('Enter the starting index ' +
+                offset = -first_index+pyip.inputInt('Enter the starting index '+
                         f'[{first_index}, {last_index}]: ', min=first_index, max=last_index)
-                return (first_index, pyip.inputInt('Enter the last index ' +
+                first_index += offset
+                return (first_index, offset, pyip.inputInt('Enter the last index '+
                         f'[{first_index}, {last_index}]: ', min=first_index,
                         max=last_index)-first_index+1)
         else:
             use_all = f'Use ([{first_index}, {first_index+num_required-1}])'
             pick_offset = 'Pick a starting index offset'
             menuchoice = pyip.inputMenu([use_all, pick_offset], numbered=True)
+            offset = 0
             if menuchoice == pick_offset:
-                first_index += pyip.inputInt('Enter the starting index offset' +
+                offset = pyip.inputInt('Enter the starting index offset'+
                         f'[0, {last_index-first_index-num_required}]: ',
                         min=0, max=last_index-first_index-num_required)
-            return (first_index, num_required)
+                first_index += offset
+            return (first_index, offset, num_required)
 
 def loadImage(filepath, img_x_bounds=None, img_y_bounds=None):
     """Load a single image from file."""
@@ -228,16 +249,16 @@ def loadImageStack(img_folder, img_start, num_imgs, num_img_skip=0,
 
 def quickImshow(a, title=None, save_fig=False, save_only=False, clear=True, **kwargs):
     if title != None and type(title) != str:
-        logging.error('Illegal entry for title in quickImshow')
+        logging.error(f'Illegal entry for title in quickImshow ({title})')
         return
     if type(save_fig) != bool:
-        logging.error('Illegal entry for save_fig in quickImshow')
+        logging.error(f'Illegal entry for save_fig in quickImshow ({save_fig})')
         return
     if type(save_only) != bool:
-        logging.error('Illegal entry for save_only in quickImshow')
+        logging.error(f'Illegal entry for save_only in quickImshow ({save_only})')
         return
     if type(clear) != bool:
-        logging.error('Illegal entry for clear in quickImshow')
+        logging.error(f'Illegal entry for clear in quickImshow ({clear})')
         return
     if not title:
         title='quick_imshow'
@@ -263,16 +284,16 @@ def quickImshow(a, title=None, save_fig=False, save_only=False, clear=True, **kw
 
 def quickPlot(*args, title=None, save_fig=False, save_only=False, clear=True, **kwargs):
     if title != None and type(title) != str:
-        logging.error('Illegal entry for title in quickPlot')
+        logging.error(f'Illegal entry for title in quickPlot ({title})')
         return
     if type(save_fig) != bool:
-        logging.error('Illegal entry for save_fig in quickPlot')
+        logging.error(f'Illegal entry for save_fig in quickPlot ({save_fig})')
         return
     if type(save_only) != bool:
-        logging.error('Illegal entry for save_only in quickPlot')
+        logging.error(f'Illegal entry for save_only in quickPlot ({save_only})')
         return
     if type(clear) != bool:
-        logging.error('Illegal entry for clear in quickPlot')
+        logging.error(f'Illegal entry for clear in quickPlot ({clear})')
         return
     if not title:
         title = 'quick_plot'
@@ -295,7 +316,6 @@ def quickPlot(*args, title=None, save_fig=False, save_only=False, clear=True, **
         plt.figure(title)
         if depth_tuple(args) > 1:
            for y in args:
-               print(f'y = {y} {type(y)}')
                plt.plot(*y, **kwargs)
         else:
             plt.plot(*args, **kwargs)
@@ -334,7 +354,7 @@ def selectArrayBounds(a, x_low=None, x_upp=None, num_x_min=None,
                 break
     else:
         if type(x_low) != int or x_low < 0 or x_low >= a.size:
-            logging.error('Illegal x_low input in selectArrayBounds')
+            logging.error(f'Illegal x_low input in selectArrayBounds ({x_low})')
             return None
     if x_upp == None:
         x_min = x_low+num_x_min
@@ -355,7 +375,7 @@ def selectArrayBounds(a, x_low=None, x_upp=None, num_x_min=None,
                 break
     else:
         if type(x_upp) != int or x_upp < 1 or x_upp > a.size:
-            logging.error('Illegal x_upp input in selectArrayBounds')
+            logging.error(f'Illegal x_upp input in selectArrayBounds ({x_upp})')
             return None
     print(f'lower bound = {x_low} (inclusive)\nupper bound = {x_upp} (exclusive)]')
     bounds = [x_low, x_upp]
