@@ -16,6 +16,7 @@ import numpy as np
 import imageio as img
 import matplotlib.pyplot as plt
 from time import time
+from ast import literal_eval
 
 def depth_list(L): return isinstance(L, list) and max(map(depth_list, L))+1
 def depth_tuple(T): return isinstance(T, tuple) and max(map(depth_tuple, T))+1
@@ -29,13 +30,12 @@ def get_trailing_int(string):
         return int(mo.group())
 
 def loadConfigFile(filepath):
-    #RV eval can be a security risk, replace at one point
     if not os.path.isfile(filepath):
         logging.error(f'{filepath} does not exist')
         return {}
     with open(filepath, 'r') as f:
         lines = f.read().splitlines()
-    return {item[0].strip():eval(item[1]) for item in
+    return {item[0].strip():literal_eval(item[1].strip()) for item in
             [line.split('#')[0].split('=') for line in lines if '=' in line.split('#')[0]]}
 
 def searchConfigFile(filepath, search_string):
@@ -63,7 +63,7 @@ def updateConfigFile(filepath, key, value, search_string=None, header=None):
     else:
         with open(filepath, 'r') as f:
             lines = f.read().splitlines()
-    config = {item[0].strip():eval(item[1]) for item in
+    config = {item[0].strip():literal_eval(item[1].strip()) for item in
             [line.split('#')[0].split('=') for line in lines if '=' in line.split('#')[0]]}
     if type(key) != str:
         logging.error(f'Illegal key input type in updateConfigFile ({type(key)})')
