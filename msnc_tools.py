@@ -21,6 +21,57 @@ from ast import literal_eval
 def depth_list(L): return isinstance(L, list) and max(map(depth_list, L))+1
 def depth_tuple(T): return isinstance(T, tuple) and max(map(depth_tuple, T))+1
 
+def is_int(v, vmin=None, vmax=None):
+    """Value is an integer in range vmin <= v <= vmax"""
+    if type(v) != int:
+        return False
+    if vmin != None and v < vmin:
+        return False
+    if vmax != None and v > vmax:
+        return False
+    return True
+
+def is_num(v, vmin=None, vmax=None):
+    """Value is a number in range vmin <= v <= vmax"""
+    if not (type(v) == int or type(v) == float):
+        return False
+    if vmin != None and v < vmin:
+        return False
+    if vmax != None and v > vmax:
+        return False
+    return True
+
+def is_index(v, vmin=0, vmax=None):
+    """Value is an array index in range vmin <= v < vmax"""
+    if type(v) != int:
+        return False
+    if v < vmin:
+        return False
+    if vmax != None and v > vmax:
+        return False
+    return True
+
+def is_index_range(v, vmin=0, vmax=None):
+    """Value is an array index range in range vmin <= v[0] <= v[1] < vmax"""
+    if not (type(v) == list and len(v) == 2 and type(v[0]) == int and
+            type(v[1]) == int and v[0] < v[1]):
+        return False
+    if v[0] < vmin:
+        return False
+    if vmax != None and v[1] > vmax:
+        return False
+    return True
+
+def illegal_value(name, value, location=None):
+    if location == None or type(location) != str:
+        location = ''
+    else:
+        location = f'in {location} '
+    if type(name) == str:
+        logging.error(f'Illegal value for {name} {location}({value}, {type(value)})')
+    else:
+        logging.error(f'Illegal value {location}({value}, {type(value)})')
+
 def get_trailing_int(string):
     indexRegex = re.compile(r'\d+$')
     mo = indexRegex.search(string)
