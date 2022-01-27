@@ -6,8 +6,8 @@ Created on Fri Dec 10 09:54:37 2021
 """
 
 import logging
-logging.basicConfig(level=logging.WARNING, format=' %(asctime)s-%(levelname)s %(message)s')
-#logging.basicConfig(level=logging.INFO, format=' %(asctime)s-%(levelname)s %(message)s')
+#logging.basicConfig(level=logging.WARNING, format=' %(asctime)s-%(levelname)s %(message)s')
+logging.basicConfig(level=logging.INFO, format=' %(asctime)s-%(levelname)s %(message)s')
 #logging.basicConfig(level=logging.DEBUG, format=' %(asctime)s-%(levelname)s %(message)s')
 
 import os
@@ -584,9 +584,8 @@ class Tomo:
             if num_x_min > self.tbf.shape[0]:
                 logging.warning('Image bounds and pixel size prevent seamless stacking')
                 num_x_min = self.tbf.shape[0]
-        img_x_bounds = self.config.get('img_x_bounds', None)
-        
-        if img_x_bounds == None:
+        img_x_bounds = self.config.get('img_x_bounds', [None, None])
+        if img_x_bounds[0] == None or img_x_bounds[1] == None:
             print('\nSelect image bounds from bright field')
             msnc.quickImshow(self.tbf, title='bright field')
             tbf_x_sum = np.sum(self.tbf, 1)
@@ -1023,7 +1022,7 @@ class Tomo:
             while True:
                 center_stack_index = pyip.inputInt(
                         '\nEnter tomography set index to get rotation axis centers '+
-                        f'[1+self.tomo_data_indices[0],'+
+                        f'[{1+self.tomo_data_indices[0]},'+
                         f'{1+self.tomo_data_indices[self.num_tomo_data_sets-1]}]: ',
                         min=1+self.tomo_data_indices[0],
                         max=1+self.tomo_data_indices[self.num_tomo_data_sets-1])
@@ -1283,7 +1282,7 @@ class Tomo:
                 center_offsets = [lower_center_offset-lower_row*center_slope,
                         upper_center_offset+(self.tomo_sets[i].shape[0]-1-upper_row)*center_slope]
                 t0 = time()
-                tomo_recon_stack = self._reconstructOneTomoSet(self.tomo_sets[i], thetas,
+                self.tomo_recon_sets[i]= self._reconstructOneTomoSet(self.tomo_sets[i], thetas,
                         center_offsets=center_offsets, sigma=0.1, ncore=self.ncore,
                         algorithm='gridrec', run_secondary_sirt=False, secondary_iter=50)
                 logging.info(f'tomo recon took {time()-t0:.2f} seconds!')
@@ -1292,13 +1291,13 @@ class Tomo:
                     title = f'{basetitle} slice{row_slice}'
                 else:
                     title = f'{basetitle} {1+self.tomo_data_indices[i]} slice{row_slice}'
-                msnc.quickImshow(tomo_recon_stack[row_slice,:,:], title=title,
+                msnc.quickImshow(self.tomo_recon_sets[i][row_slice,:,:], title=title,
                         save_fig=self.save_plots, save_only=self.save_plots_only)
-                msnc.quickPlot(tomo_recon_stack[row_slice,int(tomo_recon_stack.shape[2]/2),:],
-                        title=f'{title} cut{int(tomo_recon_stack.shape[2]/2)}',
+                msnc.quickPlot(self.tomo_recon_sets[i]
+                        [row_slice,int(self.tomo_recon_sets[i].shape[2]/2),:],
+                        title=f'{title} cut{int(self.tomo_recon_sets[i].shape[2]/2)}',
                         save_fig=self.save_plots, save_only=self.save_plots_only)
-                self._saveTomo('recon stack', tomo_recon_stack, i)
-                self.tomo_recon_sets[i] = tomo_recon_stack
+                self._saveTomo('recon stack', self.tomo_recon_sets[i], i)
 
         # Update config file
         if not load_error:
