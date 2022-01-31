@@ -25,19 +25,15 @@ def is_int(v, vmin=None, vmax=None):
     """Value is an integer in range vmin <= v <= vmax"""
     if type(v) != int:
         return False
-    if vmin != None and v < vmin:
-        return False
-    if vmax != None and v > vmax:
+    if (vmin != None and v < vmin) or (vmax != None and v > vmax):
         return False
     return True
 
 def is_num(v, vmin=None, vmax=None):
     """Value is a number in range vmin <= v <= vmax"""
-    if not (type(v) == int or type(v) == float):
+    if not type(v) in (int,float):
         return False
-    if vmin != None and v < vmin:
-        return False
-    if vmax != None and v > vmax:
+    if (vmin != None and v < vmin) or (vmax != None and v > vmax):
         return False
     return True
 
@@ -45,29 +41,24 @@ def is_index(v, vmin=0, vmax=None):
     """Value is an array index in range vmin <= v < vmax"""
     if type(v) != int:
         return False
-    if v < vmin:
-        return False
-    if vmax != None and v > vmax:
+    if v < vmin or (vmax != None and v >= vmax):
         return False
     return True
 
 def is_index_range(v, vmin=0, vmax=None):
     """Value is an array index range in range vmin <= v[0] <= v[1] < vmax"""
-    if not (type(v) == list and len(v) == 2 and type(v[0]) == int and
-            type(v[1]) == int and v[0] < v[1]):
+    if not (type(v) is list and len(v) == 2 and type(v[0]) == int and type(v[1]) == int):
         return False
-    if v[0] < vmin:
-        return False
-    if vmax != None and v[1] > vmax:
+    if not 0 <= v[0] < v[1] or (vmax != None and v[1] >= vmax):
         return False
     return True
 
 def illegal_value(name, value, location=None):
-    if location == None or type(location) != str:
+    if not isinstance(location, str):
         location = ''
     else:
         location = f'in {location} '
-    if type(name) == str:
+    if isinstance(name, str):
         logging.error(f'Illegal value for {name} {location}({value}, {type(value)})')
     else:
         logging.error(f'Illegal value {location}({value}, {type(value)})')
@@ -82,7 +73,7 @@ def get_trailing_int(string):
 
 def loadConfigFile(filepath):
     if not os.path.isfile(filepath):
-        logging.error(f'{filepath} does not exist')
+        logging.error(f'Unable to load {filepath}')
         return {}
     with open(filepath, 'r') as f:
         lines = f.read().splitlines()
@@ -91,7 +82,7 @@ def loadConfigFile(filepath):
 
 def searchConfigFile(filepath, search_string):
     if not os.path.isfile(filepath):
-        logging.error(f'{filepath} does not exist')
+        logging.error(f'Unable to load {filepath}')
         return False
     with open(filepath, 'r') as f:
         lines = f.read()
@@ -109,17 +100,17 @@ def appendConfigFile(filepath, newlines):
 
 def updateConfigFile(filepath, key, value, search_string=None, header=None):
     if not os.path.isfile(filepath):
-        logging.error(f'file does not exist: {filepath}')
+        logging.error(f'Unable to load {filepath}')
         lines = []
     else:
         with open(filepath, 'r') as f:
             lines = f.read().splitlines()
     config = {item[0].strip():literal_eval(item[1].strip()) for item in
             [line.split('#')[0].split('=') for line in lines if '=' in line.split('#')[0]]}
-    if type(key) != str:
+    if not isinstance(key, str):
         logging.error(f'Illegal key input type in updateConfigFile ({type(key)})')
         return config
-    if type(value) == str:
+    if isinstance(value, str):
         newline = f"{key} = '{value}'"
     else:
         newline = f'{key} = {value}'
@@ -134,9 +125,9 @@ def updateConfigFile(filepath, key, value, search_string=None, header=None):
     else:
         # Insert new key/value pair
         if search_string != None:
-            if type(search_string) == str:
+            if isinstance(search_string, str):
                 search_string = [search_string]
-            elif not (type(search_string) == tuple or type(search_string) == list):
+            elif not isinstance(search_string, (tuple, list)):
                 logging.error('Illegal search_string input in updateConfigFile'+
                         f'(type{search_string})')
                 search_string = None
@@ -153,7 +144,7 @@ def updateConfigFile(filepath, key, value, search_string=None, header=None):
                     update_flag = True
                     break
         if not update_flag:
-            if type(header) == str:
+            if isinstance(header, str):
                 lines += ['', header, newline]
             else:
                 lines += ['', newline]
@@ -170,10 +161,10 @@ def selectFiles(folder, name=None, num_required=None):
     files = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f)) and
             f.endswith('.tif') and indexRegex.search(f)]
     num_files = len(files)
-    if type(name) != str:
-        name = ' '
-    else:
+    if isinstance(name, str):
         name = f' {name} '
+    else:
+        name = ' '
     if len(files) < 1:
         logging.warning('No available'+name+'files')
         return (0, 0, 0)
@@ -185,7 +176,7 @@ def selectFiles(folder, name=None, num_required=None):
                 return (0, 0, 0)
             return (int(first_index), 0, 1)
     else:
-        if type(num_required) != int or num_required < 1:
+        if not is_int(num_required, 1):
             logging.error(f'Illegal value of num_required ({num_required}, '+
                     f'{type(num_required)})')
             return (0, 0, 0)
@@ -251,21 +242,21 @@ def selectFiles(folder, name=None, num_required=None):
 def loadImage(filepath, img_x_bounds=None, img_y_bounds=None):
     """Load a single image from file."""
     if not os.path.isfile(filepath):
-       logging.error(f'Unable to load {filepath}')
-       return None
+        logging.error(f'Unable to load {filepath}')
+        return None
     img_read = img.imread(filepath)
     if not img_x_bounds:
         img_x_bounds = [0, img_read.shape[0]]
     else:
-        if (type(img_x_bounds) != list or len(img_x_bounds) != 2 or 
-                img_x_bounds[0] < 0 or img_x_bounds[1] > img_read.shape[0]):
+        if (not isinstance(img_x_bounds, list) or len(img_x_bounds) != 2 or 
+                not (0 <= img_x_bounds[0] < img_x_bounds[1] <= img_read.shape[0])):
             logging.error(f'inconsistent row dimension in {filepath}')
             return None
     if not img_y_bounds:
         img_y_bounds = [0, img_read.shape[1]]
     else:
-        if (type(img_y_bounds) != list or len(img_y_bounds) != 2 or 
-                img_y_bounds[0] < 0 or img_y_bounds[1] > img_read.shape[1]):
+        if (not isinstance(img_y_bounds, list) or len(img_y_bounds) != 2 or 
+                not (0 <= img_y_bounds[0] < img_y_bounds[1] <= img_read.shape[0])):
             logging.error(f'inconsistent column dimension in {filepath}')
             return None
     return img_read[img_x_bounds[0]:img_x_bounds[1],img_y_bounds[0]:img_y_bounds[1]]
@@ -299,7 +290,7 @@ def loadImageStack(img_folder, img_start, num_imgs, num_img_skip=0,
     return img_stack
 
 def quickImshow(a, title=None, save_fig=False, save_only=False, clear=True, **kwargs):
-    if title != None and type(title) != str:
+    if title != None and not isinstance(title, str):
         logging.error(f'Illegal entry for title in quickImshow ({title})')
         return
     if type(save_fig) != bool:
@@ -334,7 +325,7 @@ def quickImshow(a, title=None, save_fig=False, save_only=False, clear=True, **kw
         plt.pause(1)
 
 def quickPlot(*args, title=None, save_fig=False, save_only=False, clear=True, **kwargs):
-    if title != None and type(title) != str:
+    if title != None and not isinstance(title, str):
         logging.error(f'Illegal entry for title in quickPlot ({title})')
         return
     if type(save_fig) != bool:
@@ -377,7 +368,7 @@ def quickPlot(*args, title=None, save_fig=False, save_only=False, clear=True, **
 def selectArrayBounds(a, x_low=None, x_upp=None, num_x_min=None,
         title='select array bounds'):
     """Interactively select the lower and upper data bounds for a numpy array."""
-    if type(a) != np.ndarray or a.ndim != 1:
+    if not isinstance(a, np.ndarray) or a.ndim != 1:
         logging.error('Illegal array type or dimension in selectArrayBounds')
         return None
     if num_x_min == None:
@@ -404,7 +395,7 @@ def selectArrayBounds(a, x_low=None, x_upp=None, num_x_min=None,
                         min=0, max=x_low_max)
                 break
     else:
-        if type(x_low) != int or x_low < 0 or x_low >= a.size:
+        if not is_int(x_low, 0, a.size-num_x_min):
             logging.error(f'Illegal x_low input in selectArrayBounds ({x_low})')
             return None
     if x_upp == None:
@@ -425,7 +416,7 @@ def selectArrayBounds(a, x_low=None, x_upp=None, num_x_min=None,
                         min=x_upp_min, max=a.size)
                 break
     else:
-        if type(x_upp) != int or x_upp < 1 or x_upp > a.size:
+        if not is_int(x_upp, x_low+num_x_min, a.size):
             logging.error(f'Illegal x_upp input in selectArrayBounds ({x_upp})')
             return None
     print(f'lower bound = {x_low} (inclusive)\nupper bound = {x_upp} (exclusive)]')
