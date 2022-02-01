@@ -9,9 +9,6 @@ import logging
 stream_handler = logging.StreamHandler()
 stream_handler.setLevel(logging.WARNING)
 stream_handler.setFormatter(logging.Formatter('%(asctime)s : %(levelname)s - %(message)s'))
-logging.basicConfig(level=logging.INFO,
-        format='%(asctime)s : %(levelname)s - %(module)s : %(funcName)s - %(message)s',
-        handlers=[logging.FileHandler("tomo.log", mode='w'), stream_handler])
 
 import os
 import sys
@@ -49,11 +46,13 @@ class set_numexpr_threads:
 class Tomo:
     """Processing tomography data with misalignment."""
     
-    def __init__(self, filepath=None, config_dict=None, testmode=False):
-        """Initialize with optional config input filepath or dictionary"""
+    def __init__(self, config_file=None, config_dict=None, output_folder='./',log_level='INFO',
+            test_mode=False):
+        """Initialize with optional config input file or dictionary"""
         self.ncore = mp.cpu_count()
         self.config = {}
         self.detector = {}
+        self.output_folder = output_folder
         self.is_valid = False
         self.start_theta = 0.
         self.end_theta = 180.
@@ -79,11 +78,27 @@ class Tomo:
         self.tomo_recon_sets = []
         self.save_plots = True
         self.save_plots_only = True
-        self.testmode = testmode
+        self.test_mode = test_mode
+
+        # Set log configuration
+        logging.basicConfig(level=logging.INFO,
+                format='%(asctime)s : %(levelname)s - %(module)s : %(funcName)s - %(message)s',
+                handlers=[logging.FileHandler(f'{output_folder}/tomo.log', mode='w'),
+                stream_handler])
+        if self.test_mode:
+            self.save_plots_only = True
+            logging.basicConfig(filename=f'{output_folder}/tomo.log', filemode='w',
+                    uevel=logging.WARNING)
+            logging.warning('Ignoring command line log_level argument in test mode')
+        else:
+            level = getattr(logging, log_level.upper(), None)
+            if type(level) != int:
+                raise ValueError(f'Invalid log_level: {log_level}')
+            stream_handler.setLevel(level)
 
         # Load config file 
-        if not filepath is None:
-           self._loadConfigFile(filepath)
+        if not config_file is None:
+           self._loadConfigFile(config_file)
         elif not config_dict is None:
            self._loadConfigDict(config_dict)
         else:
@@ -112,25 +127,22 @@ class Tomo:
             logging.error(f'Missing input item(s): {", ".join(pars_missing)}')
         self.is_valid = is_valid and self.is_valid
 
-        if self.testmode:
-            self.save_plots_only = True
-
-    def _loadConfigFile(self, filepath):
+    def _loadConfigFile(self, config_file):
         '''Takes the full/relative path to a text or yml file and loads it into 
         the dictionary self.config'''
 
         # Ensure config file exists before opening
-        if not os.path.isfile(filepath):
-            logging.error(f'File does not exist: {filepath}')
+        if not os.path.isfile(config_file):
+            logging.error(f'File does not exist: {config_file}')
             return
 
         # Load config file
-        suffix = Path(filepath).suffix
+        suffix = Path(config_file).suffix
         if suffix == '.yml' or suffix == '.yaml':
-            with open(filepath, 'r') as f:
+            with open(config_file, 'r') as f:
                 config = yaml.safe_load(f)
         elif suffix == '.txt':
-            config = msnc.loadConfigFile(filepath)
+            config = msnc.loadConfigFile(config_file)
         else:
             logging.error(f'Illegal config file extension: {suffix}')
 
@@ -138,7 +150,7 @@ class Tomo:
         if isinstance(config, dict):
             self.config = config
         else:
-            logging.error(f'Could not load dictionary from config file: {filepath}')
+            logging.error(f'Could not load dictionary from config file: {config_file}')
 
     def _loadConfigDict(self, config_dict):
         '''Takes a dictionary and places it into self.config.'''
@@ -211,22 +223,22 @@ class Tomo:
             return
 
         # Ensure config file exists before opening
-        filepath = self.config['detector_id']+'.yml'
-        if not os.path.isfile(filepath):
-            filepath = self.config['detector_id']+'.yaml'
-            if not os.path.isfile(filepath):
-                logging.error(f'File does not exist: {filepath}')
+        detector_file = self.config['detector_id']+'.yml'
+        if not os.path.isfile(detector_file):
+            detector_file = self.config['detector_id']+'.yaml'
+            if not os.path.isfile(detector_file):
+                logging.error(f'File does not exist: {detector_file}')
                 return
 
         # Load detector yml file
-        with open(filepath, 'r') as f:
+        with open(detector_file, 'r') as f:
             detector = yaml.safe_load(f)
 
         # Make sure yaml could load detector file as a dictionary
         if isinstance(detector, dict):
             self.detector = detector
         else:
-            logging.error(f'Could not load dictionary from file: {filepath}')
+            logging.error(f'Could not load dictionary from file: {detector_file}')
 
     def _validateDetector(self, pars_missing):
         '''Returns False if detector parameters are missing or other errors are
@@ -444,7 +456,7 @@ class Tomo:
         use_input = 'no'
         if (msnc.is_int(self.tdf_img_start, 0) and msnc.is_int(tdf_img_offset) and
                msnc.is_int(self.tdf_num_imgs, 0)):
-            if self.testmode:
+            if self.test_mode:
                 use_input = 'yes'
             else:
                 if tdf_img_offset < 0:
@@ -473,7 +485,7 @@ class Tomo:
         use_input = 'no'
         if (msnc.is_int(self.tbf_img_start, 0) and msnc.is_int(tbf_img_offset) and
                msnc.is_int(self.tbf_num_imgs, 0)):
-            if self.testmode:
+            if self.test_mode:
                 use_input = 'yes'
             else:
                 if tbf_img_offset < 0:
@@ -511,7 +523,7 @@ class Tomo:
             tomo_img_offsets[i] = self.config.get(key2, -1)
             use_input = 'no'
             if msnc.is_int(self.tomo_img_starts[i], 0) and msnc.is_int(tomo_img_offsets[i]):
-                if self.testmode:
+                if self.test_mode:
                     use_input = 'yes'
                 else:
                     if tomo_img_offsets[i] < 0:
@@ -569,13 +581,13 @@ class Tomo:
     def _genDark(self):
         """Generate dark field."""
         if not self.tdf_data_folder:
-            sys.exit('Invalid dark field image path.')
+            raise ValueError('Invalid dark field image path.')
         if not self.tdf_num_imgs:
-            sys.exit('Invalid number of dark field images.')
+            raise ValueError('Invalid number of dark field images.')
         if self.tdf_img_start == None:
-            sys.exit('Invalid starting index for dark field images.')
+            raise ValueError('Invalid starting index for dark field images.')
         if not self.img_x_bounds or not self.img_y_bounds:
-            sys.exit('Invalid detector dimensions.')
+            raise ValueError('Invalid detector dimensions.')
 
         # Load a stack of dark field images
         t0 = time()
@@ -595,19 +607,19 @@ class Tomo:
         logging.debug(f'tdf_cutoff = {tdf_cutoff}')
         logging.debug(f'tdf_mean = {tdf_mean}')
         np.nan_to_num(self.tdf, copy=False, nan=tdf_mean, posinf=tdf_mean, neginf=0.)
-        msnc.quickImshow(self.tdf, title='dark field', save_fig=self.save_plots,
-                save_only=self.save_plots_only)
+        msnc.quickImshow(self.tdf, title='dark field', path=self.output_folder,
+                save_fig=self.save_plots, save_only=self.save_plots_only)
 
     def _genBright(self):
         """Generate bright field."""
         if not self.tbf_data_folder:
-            sys.exit('Invalid bright field image path')
+            raise ValueError('Invalid bright field image path')
         if not self.tbf_num_imgs:
-            sys.exit('Invalid number of bright field images')
+            raise ValueError('Invalid number of bright field images')
         if self.tbf_img_start == None:
-            sys.exit('Invalid starting index for bright field images.')
+            raise ValueError('Invalid starting index for bright field images.')
         if not self.img_x_bounds or not self.img_y_bounds:
-            sys.exit('Invalid detector dimensions.')
+            raise ValueError('Invalid detector dimensions.')
 
         # Load a stack of bright field images
         logging.debug('Loading data to get median bright field...')
@@ -629,18 +641,18 @@ class Tomo:
 
         # Subtract dark field
         if not self.tdf.size:
-            sys.exit('Dark field unavailable')
+            raise ValueError('Dark field unavailable')
         self.tbf -= self.tdf
-        msnc.quickImshow(self.tbf, title='bright field', save_fig=self.save_plots,
-                save_only=self.save_plots_only)
+        msnc.quickImshow(self.tbf, title='bright field', path=self.output_folder,
+                save_fig=self.save_plots, save_only=self.save_plots_only)
 
     def _setDetectorBounds(self):
         """Set vertical detector bounds for image stack."""
         # Check reference heights
         if self.pixel_size == None:
-            sys.exit('pixel_size unavailable')
+            raise ValueError('pixel_size unavailable')
         if not self.tbf.size:
-            sys.exit('Bright field unavailable')
+            raise ValueError('Bright field unavailable')
         num_x_min = None
         if self.num_tomo_data_sets > 1:
             delta_z = self.tomo_ref_heights[1]-self.tomo_ref_heights[0]
@@ -663,7 +675,8 @@ class Tomo:
                 logging.warning('Image bounds and pixel size prevent seamless stacking')
             msnc.quickPlot(range(img_x_bounds[0], img_x_bounds[1]),
                     tbf_x_sum[img_x_bounds[0]:img_x_bounds[1]],
-                    title='sum over theta and y', save_fig=self.save_plots, save_only=True)
+                    title='sum over theta and y', path=self.output_folder,
+                    save_fig=self.save_plots, save_only=True)
         self.img_x_bounds = img_x_bounds
         logging.debug(f'img_x_bounds: {self.img_x_bounds}')
         logging.debug(f'img_y_bounds: {self.img_y_bounds}')
@@ -709,53 +722,53 @@ class Tomo:
         self.config = msnc.updateConfigFile('config.txt', 'num_theta_skip', num_theta_skip,
                 'zoom_perc')
 
-    def _saveTomo(self, basename, stack, i=None):
+    def _saveTomo(self, base_name, stack, i=None):
         """Save a tomography stack."""
         zoom_perc = self.config.get('zoom_perc')
         if zoom_perc == None or zoom_perc == 100:
-            title = f'{basename} fullres'
+            title = f'{base_name} fullres'
         else:
-            title = f'{basename} {zoom_perc}p'
+            title = f'{base_name} {zoom_perc}p'
         if msnc.is_index(i, 0, len(self.tomo_data_indices)) and self.tomo_data_indices[i] != None:
             title += f'_{1+self.tomo_data_indices[i]}'
-        filepath = re.sub(r"\s+", '_', f'{title}.npy')
+        tomo_file = re.sub(r"\s+", '_', f'{self.output_folder}/{title}.npy')
         t0 = time()
-        logging.info(f'Saving {filepath} ...')
-        np.save(filepath, stack)
+        logging.info(f'Saving {tomo_file} ...')
+        np.save(tomo_file, stack)
         logging.info(f'... done in {time()-t0:.2f} seconds!')
 
-    def _loadTomo(self, basename, i=None, required=False):
+    def _loadTomo(self, base_name, i=None, required=False):
         """Load a tomography stack."""
         # stack order: row,theta,column
         zoom_perc = self.config.get('zoom_perc')
         if zoom_perc == None or zoom_perc == 100:
-            title = f'{basename} fullres'
+            title = f'{base_name} fullres'
         else:
-            title = f'{basename} {zoom_perc}p'
+            title = f'{base_name} {zoom_perc}p'
         if msnc.is_index(i, 0, len(self.tomo_data_indices)) and self.tomo_data_indices[i] != None:
             title += f' {1+self.tomo_data_indices[i]}'
-        filepath = re.sub(r"\s+", '_', f'{title}.npy')
+        tomo_file = re.sub(r"\s+", '_', f'{self.output_folder}/{title}.npy')
         load_flag = 'no'
         available = False
-        if os.path.isfile(filepath):
+        if os.path.isfile(tomo_file):
             available = True
             if required:
                 load_flag = 'yes'
             else:
-                load_flag = pyip.inputYesNo(f'\nDo you want to load {filepath} (y/n)? ')
+                load_flag = pyip.inputYesNo(f'\nDo you want to load {tomo_file} (y/n)? ')
         stack = np.array([])
         if load_flag == 'yes':
             t0 = time()
-            logging.info(f'Loading {filepath} ...')
+            logging.info(f'Loading {tomo_file} ...')
             try:
-                stack = np.load(filepath)
+                stack = np.load(tomo_file)
             except IOError or ValueError:
                 stack = np.array([])
-                logging.error(f'Error loading {filepath}')
+                logging.error(f'Error loading {tomo_file}')
             logging.info(f'... done in {time()-t0:.2f} seconds!')
         if stack.size:
-            msnc.quickImshow(stack[:,0,:], title=title, save_fig=self.save_plots,
-                    save_only=self.save_plots_only)
+            msnc.quickImshow(stack[:,0,:], title=title, path=self.output_folder,
+                    save_fig=self.save_plots, save_only=self.save_plots_only)
         return stack, available
 
     def _genTomo(self, available_sets):
@@ -765,7 +778,7 @@ class Tomo:
                     f'({len(available_sets)}');
             available_sets = [False]*self.num_tomo_data_sets
         if not self.img_x_bounds or not self.img_y_bounds:
-            sys.exit('Invalid image dimensions.')
+            raise ValueError('Invalid image dimensions.')
         zoom_perc = self.config.get('zoom_perc')
         if zoom_perc == None:
             zoom_perc = 100
@@ -773,11 +786,11 @@ class Tomo:
         if num_theta_skip == None:
             num_theta_skip = 0
         if not self.tdf.size:
-            sys.exit('Dark field unavailable')
+            raise ValueError('Dark field unavailable')
         tdf = self.tdf[self.img_x_bounds[0]:self.img_x_bounds[1],
                 self.img_y_bounds[0]:self.img_y_bounds[1]]
         if not self.tbf.size:
-            sys.exit('Bright field unavailable')
+            raise ValueError('Bright field unavailable')
         tbf = self.tbf[self.img_x_bounds[0]:self.img_x_bounds[1],
                 self.img_y_bounds[0]:self.img_y_bounds[1]]
         for i in range(self.num_tomo_data_sets):
@@ -819,14 +832,14 @@ class Tomo:
             np.where(np.isfinite(tomo_stack), tomo_stack, 0.)
             logging.debug(f'remove nans/infs took {time()-t0:.2f} seconds!')
 
-            # Downsize tomo stack to smaller size
+            # Downsize tomography stack to smaller size
             tomo_stack = tomo_stack.astype('float32')
             if self.tomo_data_indices[i] == None:
                 title = 'red stack fullres'
             else:
                 title = f'red stack fullres {1+self.tomo_data_indices[i]}'
-            msnc.quickImshow(tomo_stack[0,:,:], title=title, save_fig=self.save_plots,
-                    save_only=self.save_plots_only)
+            msnc.quickImshow(tomo_stack[0,:,:], title=title, path=self.output_folder,
+                    save_fig=self.save_plots, save_only=self.save_plots_only)
             if zoom_perc != 100:
                 t0 = time()
                 logging.info(f'Zooming in ...')
@@ -840,15 +853,18 @@ class Tomo:
                 title = f'red stack {zoom_perc}p'
                 if self.tomo_data_indices[i] != None:
                     title += f' {1+self.tomo_data_indices[i]}'
-                msnc.quickImshow(tomo_stack[0,:,:], title=title, save_fig=self.save_plots,
-                    save_only=self.save_plots_only)
+                msnc.quickImshow(tomo_stack[0,:,:], title=title, path=self.output_folder,
+                        save_fig=self.save_plots, save_only=self.save_plots_only)
     
-            # Convert tomo_stack from theta,row,column to row,theta,column
+            # Convert tomography stack from theta,row,column to row,theta,column
             tomo_stack = np.swapaxes(tomo_stack, 0, 1)
 
-            # Save tomo stack to file
-            if not self.testmode:
+            # Save tomography stack to file
+            if not self.test_mode:
                 self._saveTomo('red stack', tomo_stack, i)
+            else:
+                np.savetxt(self.output_folder+f'red_stack_{1+self.tomo_data_indices[i]}.txt',
+                        tomo_stack[0,:,:], fmt='%.6e')
                 
             # Combine stacks
             t0 = time()
@@ -859,7 +875,7 @@ class Tomo:
         del tbf
 
     def _reconstructOnePlane(self, tomo_plane_T, center, plot_sinogram=True):
-        """Invert the sinogram for a single tomo plane."""
+        """Invert the sinogram for a single tomography plane."""
         # tomo_plane_T index order: column,theta
         assert(0 <= center < tomo_plane_T.shape[0])
         center_offset = center-tomo_plane_T.shape[0]/2
@@ -875,7 +891,8 @@ class Tomo:
             sinogram = tomo_plane_T[dist_from_edge:two_offset-dist_from_edge,:]
         if plot_sinogram:
             msnc.quickImshow(sinogram.T, f'sinogram center offset{center_offset:.2f}',
-                    save_fig=self.save_plots, save_only=self.save_plots_only, aspect='auto')
+                    path=self.output_folder, save_fig=self.save_plots,
+                    save_only=self.save_plots_only, aspect='auto')
 
         # Inverting sinogram
         t0 = time()
@@ -894,20 +911,20 @@ class Tomo:
         logging.debug(f'filtering and removing ring artifact took {time()-t0:.2f} seconds!')
         return recon_clean
 
-    def _plotEdgesOnePlane(self, recon_plane, basename, weight=0.001):
+    def _plotEdgesOnePlane(self, recon_plane, base_name, weight=0.001):
         # RV parameters for the denoise, gaussian, and ring removal will be different for different feature sizes
         edges = denoise_tv_chambolle(recon_plane, weight = weight)
         vmax = np.max(edges[0,:,:])
         vmin = -vmax
-        msnc.quickImshow(edges[0,:,:], f'{basename} coolwarm', save_fig=self.save_plots,
-                save_only=self.save_plots_only, cmap='coolwarm')
-                #save_only=self.save_plots_only, cmap='coolwarm', vmin=vmin, vmax=vmax)
-        msnc.quickImshow(edges[0,:,:], f'{basename} gray', save_fig=self.save_plots,
-                save_only=self.save_plots_only, cmap='gray', vmin=vmin, vmax=vmax)
+        msnc.quickImshow(edges[0,:,:], f'{base_name} coolwarm', path=self.output_folder,
+                save_fig=self.save_plots, save_only=self.save_plots_only, cmap='coolwarm')
+        msnc.quickImshow(edges[0,:,:], f'{base_name} gray', path=self.output_folder,
+                save_fig=self.save_plots, save_only=self.save_plots_only, cmap='gray',
+                vmin=vmin, vmax=vmax)
         del edges
 
     def _findCenterOnePlane(self, sinogram, row, tol=0.1):
-        """Find center for a single tomo plane."""
+        """Find center for a single tomography plane."""
         # sinogram index order: theta,column
         # need index order column,theta for iradon, so take transpose
         sinogram_T = sinogram.T
@@ -918,8 +935,8 @@ class Tomo:
         center_offset = tomo_center-center
         print(f'Center at row {row} using Nghia Vo’s method = {center_offset:.2f}')
         recon_plane = self._reconstructOnePlane(sinogram_T, tomo_center, False)
-        basename=f'edges row{row} center_offset{center_offset:.2f}'
-        self._plotEdgesOnePlane(recon_plane, basename)
+        base_name=f'edges row{row} center_offset{center_offset:.2f}'
+        self._plotEdgesOnePlane(recon_plane, base_name)
         if pyip.inputYesNo('Try finding center using phase correlation (y/n)? ') == 'yes':
             tomo_center = tomopy.find_center_pc(sinogram, sinogram, tol=0.1,
                     rotc_guess=tomo_center)
@@ -932,8 +949,8 @@ class Tomo:
             center_offset = tomo_center-center
             print(f'Center at row {row} using phase correlation = {center_offset:.2f}')
             recon_plane = self._reconstructOnePlane(sinogram_T, tomo_center, False)
-            basename=f'edges row{row} center_offset{center_offset:.2f}'
-            self._plotEdgesOnePlane(recon_plane, basename)
+            base_name=f'edges row{row} center_offset{center_offset:.2f}'
+            self._plotEdgesOnePlane(recon_plane, base_name)
         if pyip.inputYesNo('Accept a center location (y) or continue search (n)? ') == 'yes':
             del sinogram_T
             del recon_plane
@@ -956,8 +973,8 @@ class Tomo:
                         center_offset_step):
                 logging.info(f'center_offset = {center_offset}')
                 recon_plane = self._reconstructOnePlane(sinogram_T, center_offset+center, False)
-                basename=f'edges row{row} center_offset{center_offset}'
-                self._plotEdgesOnePlane(recon_plane, basename)
+                base_name=f'edges row{row} center_offset{center_offset}'
+                self._plotEdgesOnePlane(recon_plane, base_name)
             if pyip.inputInt('\nContinue (0) or end the search (1): ', min=0, max=1):
                 break
 
@@ -969,10 +986,10 @@ class Tomo:
     def _reconstructOneTomoSet(self, tomo_stack, thetas, row_bounds=None,
             center_offsets=[], sigma=0.1, ncore=1, algorithm='gridrec',
             run_secondary_sirt=False, secondary_iter=100):
-        """reconstruct a single tomo stack."""
+        """reconstruct a single tomography stack."""
         # stack order: row,theta,column
         # thetas must be in radians
-        # centers_offset: tomo axis shift in pixels relative to column center
+        # centers_offset: tomography axis shift in pixels relative to column center
         # RV should we remove stripes?
         # https://tomopy.readthedocs.io/en/latest/api/tomopy.prep.stripe.html
         # RV should we remove rings?
@@ -981,9 +998,9 @@ class Tomo:
             row_bounds = [0, tomo_stack.shape[0]]
         else:
             if not (0 <= row_bounds[0] <= row_bounds[1] <= tomo_stack.shape[0]):
-                sys.exit('illegal row bounds in reconstructOneTomoSet')
+                raise ValueError('Illegal row bounds in reconstructOneTomoSet')
         if thetas.size != tomo_stack.shape[1]:
-            sys.exit('theta dimension mismatch in reconstructOneTomoSet')
+            raise ValueError('theta dimension mismatch in reconstructOneTomoSet')
         if not len(center_offsets):
             centers = np.zeros((row_bounds[1]-row_bounds[0]))
         elif len(center_offsets) == 2:
@@ -991,7 +1008,7 @@ class Tomo:
                     row_bounds[1]-row_bounds[0])
         else:
             if center_offsets.size != row_bounds[1]-row_bounds[0]:
-                sys.exit('center_offsets dimension mismatch in reconstructOneTomoSet')
+                raise ValueError('center_offsets dimension mismatch in reconstructOneTomoSet')
             centers = center_offsets
         centers += tomo_stack.shape[2]/2
         #tmp = tomopy.prep.stripe.remove_stripe_fw(tomo_stack, sigma=sigma, ncore=ncore)
@@ -1056,15 +1073,15 @@ class Tomo:
                 self.num_tomo_data_sets, '# Analysis progress', '# Analysis progress')
 
     def findCenters(self):
-        """Find rotation axis centers for the tomo stacks."""
-        logging.debug('Find centers for tomo stacks')
+        """Find rotation axis centers for the tomography stacks."""
+        logging.debug('Find centers for tomography stacks')
 
         if 'center_stack_index' in self.config:
             center_stack_index = self.config['center_stack_index']-1
             if not msnc.is_int(center_stack_index, 0, self.num_tomo_data_sets-1):
                 msnc.illegal_value('center_stack_index', center_stack_index, 'config file')
             else:
-                if self.testmode:
+                if self.test_mode:
                     self.config = msnc.updateConfigFile('config.txt', 'find_centers',
                             True, 'pre_processor')
                     return
@@ -1119,7 +1136,7 @@ class Tomo:
             if key in self.config:
                 self.tomo_ref_heights[i] = self.config[key]
             else:
-                sys.exit(f'Unable to read {key} from config.txt')
+                raise ValueError(f'Unable to read {key} from config.txt')
         if self.num_tomo_data_sets == 1:
             n1 = 0
             height = center_stack.shape[0]*self.eff_pixel_size
@@ -1135,9 +1152,9 @@ class Tomo:
         n2 = center_stack.shape[0]-n1
         logging.info(f'n1 = {n1}, n2 = {n2} (n2-n1) = {(n2-n1)*self.eff_pixel_size:.3f} mm')
         if not center_stack.size:
-            sys.exit('Center stack not loaded')
+            RuntimeError('Center stack not loaded')
         msnc.quickImshow(center_stack[:,0,:], title=f'center stack theta={self.start_theta}',
-                save_fig=self.save_plots, save_only=self.save_plots_only)
+                path=self.output_folder, save_fig=self.save_plots, save_only=self.save_plots_only)
 
         # Set thetas (in degrees)
         num_theta_skip = self.config.get('num_theta_skip')
@@ -1219,26 +1236,26 @@ class Tomo:
                 'pre_processor')
 
     def checkCenters(self):
-        """Check centers for the tomo stacks."""
+        """Check centers for the tomography stacks."""
         #RV TODO load all sets and check at all stack boundaries
         return
-        logging.debug('Check centers for tomo stacks')
+        logging.debug('Check centers for tomography stacks')
         center_stack_index = self.config.get('center_stack_index')
         if center_stack_index == None:
-            sys.exit('Unable to read center_stack_index from config')
+            raise ValueError('Unable to read center_stack_index from config')
         center_stack_index = self.tomo_sets[self.tomo_data_indices.index(center_stack_index-1)]
         lower_row = self.config.get('lower_row')
         if lower_row == None:
-            sys.exit('Unable to read lower_row from config')
+            raise ValueError('Unable to read lower_row from config')
         lower_center_offset = self.config.get('lower_center_offset')
         if lower_center_offset == None:
-            sys.exit('Unable to read lower_center_offset from config')
+            raise ValueError('Unable to read lower_center_offset from config')
         upper_row = self.config.get('upper_row')
         if upper_row == None:
-            sys.exit('Unable to read upper_row from config')
+            raise ValueError('Unable to read upper_row from config')
         upper_center_offset = self.config.get('upper_center_offset')
         if upper_center_offset == None:
-            sys.exit('Unable to read upper_center_offset from config')
+            raise ValueError('Unable to read upper_center_offset from config')
         center_slope = (upper_center_offset-lower_center_offset)/(upper_row-lower_row)
         shift = upper_center_offset-lower_center_offset
         if lower_row == 0:
@@ -1252,9 +1269,9 @@ class Tomo:
             set1 = self.tomo_sets[center_stack_index-1]
             set2 = self.tomo_sets[center_stack_index]
             if not set1.size:
-                logging.error(f'Unable to load required tomo set {set1}')
+                logging.error(f'Unable to load required tomography set {set1}')
             elif not set2.size:
-                logging.error(f'Unable to load required tomo set {set1}')
+                logging.error(f'Unable to load required tomography set {set1}')
             else:
                 assert(0 <= lower_row < set2.shape[0])
                 assert(0 <= upper_row < set1.shape[0])
@@ -1265,14 +1282,15 @@ class Tomo:
                     plane1_shifted = spi.shift(plane2, [0, shift_i])
                     msnc.quickPlot((plane1[0,:],), (plane1_shifted[0,:],),
                             title=f'sets {set1} {set2} shifted {2*i} theta={self.start_theta}',
-                            save_fig=self.save_plots, save_only=self.save_plots_only)
+                            path=self.output_folder, save_fig=self.save_plots,
+                            save_only=self.save_plots_only)
         if center_stack_index < self.num_tomo_data_sets-1:
             set1 = self.tomo_sets[center_stack_index]
             set2 = self.tomo_sets[center_stack_index+1]
             if not set1.size:
-                logging.error(f'Unable to load required tomo set {set1}')
+                logging.error(f'Unable to load required tomography set {set1}')
             elif not set2.size:
-                logging.error(f'Unable to load required tomo set {set1}')
+                logging.error(f'Unable to load required tomography set {set1}')
             else:
                 assert(0 <= lower_row < set2.shape[0])
                 assert(0 <= upper_row < set1.shape[0])
@@ -1283,7 +1301,8 @@ class Tomo:
                     plane1_shifted = spi.shift(plane2, [0, shift_i])
                     msnc.quickPlot((plane1[0,:],), (plane1_shifted[0,:],), 
                             title=f'sets {set1} {set2} shifted {2*i} theta={self.start_theta}',
-                            save_fig=self.save_plots, save_only=self.save_plots_only)
+                            path=self.output_folder, save_fig=self.save_plots,
+                            save_only=self.save_plots_only)
         del plane1, plane2, plane1_shifted
 
         # Update config file
@@ -1291,8 +1310,8 @@ class Tomo:
                 'find_centers')
 
     def reconstructTomoSets(self):
-        """Reconstruct tomo sets."""
-        logging.debug('Reconstruct tomo sets')
+        """Reconstruct tomography sets."""
+        logging.debug('Reconstruct tomography sets')
 
         # Get rotation axis rows and centers
         lower_row = self.config.get('lower_row')
@@ -1361,13 +1380,18 @@ class Tomo:
                 else:
                     title = f'{basetitle} {1+self.tomo_data_indices[i]} slice{row_slice}'
                 msnc.quickImshow(self.tomo_recon_sets[i][row_slice,:,:], title=title,
-                        save_fig=self.save_plots, save_only=self.save_plots_only)
+                        path=self.output_folder, save_fig=self.save_plots,
+                        save_only=self.save_plots_only)
                 msnc.quickPlot(self.tomo_recon_sets[i]
                         [row_slice,int(self.tomo_recon_sets[i].shape[2]/2),:],
                         title=f'{title} cut{int(self.tomo_recon_sets[i].shape[2]/2)}',
-                        save_fig=self.save_plots, save_only=self.save_plots_only)
-                if not self.testmode:
+                        path=self.output_folder, save_fig=self.save_plots,
+                        save_only=self.save_plots_only)
+                if not self.test_mode:
                     self._saveTomo('recon stack', self.tomo_recon_sets[i], i)
+                else:
+                    np.savetxt(self.output_folder+f'recon_stack_{1+self.tomo_data_indices[i]}.txt',
+                            self.tomo_recon_sets[i][row_slice,:,:], fmt='%.6e')
                 self.tomo_sets[i] = np.array([])
 
         # Update config file
@@ -1376,11 +1400,11 @@ class Tomo:
                     ['check_centers', 'find_centers'])
 
     def combineTomoSets(self):
-        """Combine the reconstructed tomo stacks."""
+        """Combine the reconstructed tomography stacks."""
         if self.num_tomo_data_sets == 1:
             return
         # stack order: set,row(z),x,y
-        logging.debug('Combine reconstructed tomo stacks')
+        logging.debug('Combine reconstructed tomography stacks')
         # Load any unloaded reconstructed sets."""
         for i in range(self.num_tomo_data_sets):
             if not self.tomo_recon_sets[i].size:
@@ -1412,21 +1436,24 @@ class Tomo:
             x_bounds = self.config['x_bounds']
             if not msnc.is_index_range(x_bounds, 0, self.tomo_recon_sets[0].shape[1]):
                 msnc.illegal_value('x_bounds', x_bounds, 'config file')
-            elif not self.testmode:
-                msnc.quickPlot(tomosum, title='tomo recon stack sum yz')
+            elif not self.test_mode:
+                msnc.quickPlot(tomosum, title='recon stack sum yz')
                 if pyip.inputYesNo('\nCurrent image x-bounds: '+
                         f'[{x_bounds[0]}, {x_bounds[1]}], use these values (y/n)? ') == 'no':
                     if pyip.inputYesNo(
                             'Do you want to change the image x-bounds (y/n)? ') == 'no':
                         x_bounds = [0, self.tomo_recon_sets[0].shape[1]]
                     else:
-                        x_bounds = msnc.selectArrayBounds(tomosum, title='tomo recon stack sum yz')
+                        x_bounds = msnc.selectArrayBounds(tomosum, title='recon stack sum yz')
         else:
-            msnc.quickPlot(tomosum, title='tomo recon stack sum yz')
+            msnc.quickPlot(tomosum, title='recon stack sum yz')
             if pyip.inputYesNo('\nDo you want to change the image x-bounds (y/n)? ') == 'no':
                 x_bounds = [0, self.tomo_recon_sets[0].shape[1]]
             else:
-                x_bounds = msnc.selectArrayBounds(tomosum, title='tomo recon stack sum yz')
+                x_bounds = msnc.selectArrayBounds(tomosum, title='recon stack sum yz')
+        if False and self.test_mode:
+            np.savetxt(self.output_folder+'recon_stack_sum_yz.txt',
+                    tomosum[x_bounds[0]:x_bounds[1]], fmt='%.6e')
         tomosum = 0
         [tomosum := tomosum+np.sum(tomo_recon_stack, axis=(0,1)) for tomo_recon_stack in
                 self.tomo_recon_sets]
@@ -1434,23 +1461,26 @@ class Tomo:
             y_bounds = self.config['y_bounds']
             if not msnc.is_index_range(x_bounds, 0, self.tomo_recon_sets[0].shape[1]):
                 msnc.illegal_value('y_bounds', y_bounds, 'config file')
-            elif not self.testmode:
-                msnc.quickPlot(tomosum, title='tomo recon stack sum xz')
+            elif not self.test_mode:
+                msnc.quickPlot(tomosum, title='recon stack sum xz')
                 if pyip.inputYesNo('\nCurrent image y-bounds: '+
                         f'[{y_bounds[0]}, {y_bounds[1]}], use these values (y/n)? ') == 'no':
                     if pyip.inputYesNo(
                             'Do you want to change the image y-bounds (y/n)? ') == 'no':
                         y_bounds = [0, self.tomo_recon_sets[0].shape[1]]
                     else:
-                        y_bounds = msnc.selectArrayBounds(tomosum, title='tomo recon stack sum yz')
+                        y_bounds = msnc.selectArrayBounds(tomosum, title='recon stack sum yz')
         else:
-            msnc.quickPlot(tomosum, title='tomo recon stack sum xz')
+            msnc.quickPlot(tomosum, title='recon stack sum xz')
             if pyip.inputYesNo('\nDo you want to change the image y-bounds (y/n)? ') == 'no':
                 y_bounds = [0, self.tomo_recon_sets[0].shape[1]]
             else:
-                y_bounds = msnc.selectArrayBounds(tomosum, title='tomo recon stack sum xz')
+                y_bounds = msnc.selectArrayBounds(tomosum, title='recon stack sum xz')
+        if False and self.test_mode:
+            np.savetxt(self.output_folder+'recon_stack_sum_xz.txt',
+                    tomosum[y_bounds[0]:y_bounds[1]], fmt='%.6e')
 
-        # Combine reconstructed tomo sets
+        # Combine reconstructed tomography sets
         logging.info(f'Combining reconstructed sets ...')
         t0 = time()
         if self.num_tomo_data_sets == 1:
@@ -1470,41 +1500,49 @@ class Tomo:
                     x_bounds[0]:x_bounds[1],y_bounds[0]:y_bounds[1]]])
         logging.info(f'... done in {time()-t0:.2f} seconds!')
         tomosum = np.sum(tomo_recon_combined, axis=(1,2))
-        if self.testmode:
+        if self.test_mode:
             zoom_perc = self.config.get('zoom_perc')
-            filename = 'tomo recon combined sum xy'
+            filename = 'recon combined sum xy'
             if zoom_perc == None or zoom_perc == 100:
                 filename += ' fullres.dat'
             else:
                 filename += f' {zoom_perc}p.dat'
-                np.savetxt(filename, tomosum, fmt='%.6e', delimiter='\n')
-            msnc.quickPlot(tomosum, title='tomo recon combined sum xy',
-                    save_fig=self.save_plots, save_only=self.save_plots_only)
+            msnc.quickPlot(tomosum, title='recon combined sum xy',
+                    path=self.output_folder, save_fig=self.save_plots,
+                    save_only=self.save_plots_only)
+            if False:
+                np.savetxt(self.output_folder+'recon_combined_sum_xy.txt',
+                        tomosum, fmt='%.6e')
+            np.savetxt(self.output_folder+'recon_combined.txt',
+                    tomo_recon_combined[int(tomo_recon_combined.shape[0]/2),:,:], fmt='%.6e')
             return
-        msnc.quickPlot(tomosum, title='tomo recon combined sum xy')
+        msnc.quickPlot(tomosum, title='recon combined sum xy')
         if pyip.inputYesNo(
                 '\nDo you want to change the image z-bounds (y/n)? ') == 'no':
             z_bounds = [0, tomo_recon_combined.shape[0]]
         else:
-            z_bounds = msnc.selectArrayBounds(tomosum, title='tomo recon combined sum xy')
+            z_bounds = msnc.selectArrayBounds(tomosum, title='recon combined sum xy')
         if z_bounds[0] != 0 or z_bounds[1] != tomo_recon_combined.shape[0]:
             tomo_recon_combined = tomo_recon_combined[z_bounds[0]:z_bounds[1],:,:]
         logging.info(f'tomo_recon_combined.shape = {tomo_recon_combined.shape}')
         msnc.quickImshow(tomo_recon_combined[int(tomo_recon_combined.shape[0]/2),:,:],
-                title=f'tomo recon combined xslice{int(tomo_recon_combined.shape[0]/2)}',
-                save_fig=self.save_plots, save_only=self.save_plots_only)
+                title=f'recon combined xslice{int(tomo_recon_combined.shape[0]/2)}',
+                path=self.output_folder, save_fig=self.save_plots,
+                save_only=self.save_plots_only)
         msnc.quickImshow(tomo_recon_combined[:,int(tomo_recon_combined.shape[1]/2),:],
-                title=f'tomo recon combined yslice{int(tomo_recon_combined.shape[1]/2)}',
-                save_fig=self.save_plots, save_only=self.save_plots_only)
+                title=f'recon combined yslice{int(tomo_recon_combined.shape[1]/2)}',
+                path=self.output_folder, save_fig=self.save_plots,
+                save_only=self.save_plots_only)
         msnc.quickImshow(tomo_recon_combined[:,:,int(tomo_recon_combined.shape[2]/2)],
-                title=f'tomo recon combined zslice{int(tomo_recon_combined.shape[2]/2)}',
-                save_fig=self.save_plots, save_only=self.save_plots_only)
+                title=f'recon combined zslice{int(tomo_recon_combined.shape[2]/2)}',
+                path=self.output_folder, save_fig=self.save_plots,
+                save_only=self.save_plots_only)
 
         # Save combined reconstructed tomo sets
-        basename = 'recon combined'
+        base_name = 'recon combined'
         for i in range(self.num_tomo_data_sets):
-            basename += f' {1+self.tomo_data_indices[i]}'
-        self._saveTomo(basename, tomo_recon_combined)
+            base_name += f' {1+self.tomo_data_indices[i]}'
+        self._saveTomo(base_name, tomo_recon_combined)
 
         # Update config file
         msnc.updateConfigFile('config.txt', 'x_bounds', x_bounds,
@@ -1514,17 +1552,19 @@ class Tomo:
         self.config = msnc.updateConfigFile('config.txt', 'combine_sets', True,
                 'reconstruct_sets')
 
-def runTomo(filepath=None, config_dict=None, testmode=False):
+def runTomo(config_file=None, config_dict=None, output_folder='./', log_level='INFO',
+        test_mode=False):
     """Run a tomography analysis"""
-    tomo = Tomo(filepath=filepath, testmode=testmode)
+    tomo = Tomo(config_file=config_file, output_folder=output_folder, log_level=log_level,
+            test_mode=test_mode)
     if not tomo.is_valid:
-        sys.exit('Invalid config and/or detector file provided.')
+        raise ValueError('Invalid config and/or detector file provided.')
 
     # Preprocess the image files
     if tomo.config.get('pre_processor', 0) != tomo.num_tomo_data_sets:
         tomo.genTomoSets()
         if not tomo.is_valid:
-            sys.exit('Unable to load all required image files.')
+            IOError('Unable to load all required image files.')
         if 'check_centers' in tomo.config:
             tomo.config = msnc.updateConfigFile('config.txt', 'check_centers', False)
         if 'reconstruct_sets' in tomo.config:
@@ -1551,37 +1591,47 @@ def runTomo(filepath=None, config_dict=None, testmode=False):
 #%%============================================================================
 if __name__ == '__main__':
     arguments = sys.argv[1:]
-    configfile = 'config.txt'
-    loglevel = 'INFO'
-    testmode = False
+    config_file = 'config.txt'
+    output_folder = './'
+    log_level = 'INFO'
+    test_mode = False
     try:
-        opts, args = getopt.getopt(arguments,"hc:l:t")
+        opts, args = getopt.getopt(arguments,"hc:o:l:t")
     except getopt.GetoptError:
-        print('usage: tomo.py -c <configfile> -l <loglevel> -t')
+        print('usage: tomo.py -c <config_file> -o <output_folder> -l <log_level> -t')
         sys.exit(2)
     for opt, arg in opts:
         if opt == '-h':
-            print('usage: tomo.py -c <configfile> -l <loglevel> -t')
+            print('usage: tomo.py -c <config_file> -o <output_folder> -l <log_level> -t')
             sys.exit()
         elif opt in ("-c"):
-            configfile = arg
+            config_file = arg
+        elif opt in ("-o"):
+            output_folder = arg
         elif opt in ("-l"):
-            loglevel = arg
+            log_level = arg
         elif opt in ("-t"):
-            testmode = True
+            test_mode = True
 
-    if testmode:
-        logging.basicConfig(filename='tomo.log', filemode='w', level=logging.WARNING)
-        if len(loglevel):
-            logging.warning('Ignoring command line loglevel argument in test mode')
+    logging.basicConfig(level=logging.INFO,
+            format='%(asctime)s : %(levelname)s - %(module)s : %(funcName)s - %(message)s',
+            handlers=[logging.FileHandler(f'{output_folder}/tomo.log', mode='w'), stream_handler])
+    if test_mode:
+        logging.basicConfig(filename=f'{output_folder}/tomo.log', filemode='w',
+                uevel=logging.WARNING)
+        if len(log_level):
+            logging.warning('Ignoring command line log_level argument in test mode')
     else:
-        log_level = getattr(logging, loglevel.upper(), None)
-        if type(log_level) != int:
-            raise ValueError(f'Invalid loglevel: {loglevel}')
-        stream_handler.setLevel(log_level)
-    logging.info(f'configfile = {configfile}')
+        level = getattr(logging, log_level.upper(), None)
+        if type(level) != int:
+            raise ValueError(f'Invalid log_level: {log_level}')
+        stream_handler.setLevel(level)
+    logging.info(f'config_file = {config_file}')
+    logging.info(f'output_folder = {output_folder}')
+    logging.info(f'log_level = {log_level}')
 
-    runTomo(filepath=configfile, testmode=testmode)
+    runTomo(config_file=config_file, output_folder=output_folder, log_level=log_level,
+            test_mode=test_mode)
 
 #%%============================================================================
     input('Press any key to continue')

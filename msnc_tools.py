@@ -21,35 +21,35 @@ from ast import literal_eval
 def depth_list(L): return isinstance(L, list) and max(map(depth_list, L))+1
 def depth_tuple(T): return isinstance(T, tuple) and max(map(depth_tuple, T))+1
 
-def is_int(v, vmin=None, vmax=None):
-    """Value is an integer in range vmin <= v <= vmax"""
+def is_int(v, v_min=None, v_max=None):
+    """Value is an integer in range v_min <= v <= v_max"""
     if type(v) != int:
         return False
-    if (vmin != None and v < vmin) or (vmax != None and v > vmax):
+    if (v_min != None and v < v_min) or (v_max != None and v > v_max):
         return False
     return True
 
-def is_num(v, vmin=None, vmax=None):
-    """Value is a number in range vmin <= v <= vmax"""
+def is_num(v, v_min=None, v_max=None):
+    """Value is a number in range v_min <= v <= v_max"""
     if not type(v) in (int,float):
         return False
-    if (vmin != None and v < vmin) or (vmax != None and v > vmax):
+    if (v_min != None and v < v_min) or (v_max != None and v > v_max):
         return False
     return True
 
-def is_index(v, vmin=0, vmax=None):
-    """Value is an array index in range vmin <= v < vmax"""
+def is_index(v, v_min=0, v_max=None):
+    """Value is an array index in range v_min <= v < v_max"""
     if type(v) != int:
         return False
-    if v < vmin or (vmax != None and v >= vmax):
+    if v < v_min or (v_max != None and v >= v_max):
         return False
     return True
 
-def is_index_range(v, vmin=0, vmax=None):
-    """Value is an array index range in range vmin <= v[0] <= v[1] < vmax"""
+def is_index_range(v, v_min=0, v_max=None):
+    """Value is an array index range in range v_min <= v[0] <= v[1] < v_max"""
     if not (type(v) is list and len(v) == 2 and type(v[0]) == int and type(v[1]) == int):
         return False
-    if not 0 <= v[0] < v[1] or (vmax != None and v[1] >= vmax):
+    if not 0 <= v[0] < v[1] or (v_max != None and v[1] >= v_max):
         return False
     return True
 
@@ -71,39 +71,39 @@ def get_trailing_int(string):
     else:
         return int(mo.group())
 
-def loadConfigFile(filepath):
-    if not os.path.isfile(filepath):
-        logging.error(f'Unable to load {filepath}')
+def loadConfigFile(config_file):
+    if not os.path.isfile(config_file):
+        logging.error(f'Unable to load {config_file}')
         return {}
-    with open(filepath, 'r') as f:
+    with open(config_file, 'r') as f:
         lines = f.read().splitlines()
     return {item[0].strip():literal_eval(item[1].strip()) for item in
             [line.split('#')[0].split('=') for line in lines if '=' in line.split('#')[0]]}
 
-def searchConfigFile(filepath, search_string):
-    if not os.path.isfile(filepath):
-        logging.error(f'Unable to load {filepath}')
+def searchConfigFile(config_file, search_string):
+    if not os.path.isfile(config_file):
+        logging.error(f'Unable to load {config_file}')
         return False
-    with open(filepath, 'r') as f:
+    with open(config_file, 'r') as f:
         lines = f.read()
         if search_string in lines:
             return True
     return False
 
-def appendConfigFile(filepath, newlines):
-    with open(filepath, 'a') as f:
+def appendConfigFile(config_file, new_lines):
+    with open(config_file, 'a') as f:
         f.write('\n')
-        for line in newlines.splitlines():
+        for line in new_lines.splitlines():
             f.write(f'{line}\n')
     # Update config in memory
-    return loadConfigFile(filepath)
+    return loadConfigFile(config_file)
 
-def updateConfigFile(filepath, key, value, search_string=None, header=None):
-    if not os.path.isfile(filepath):
-        logging.error(f'Unable to load {filepath}')
+def updateConfigFile(config_file, key, value, search_string=None, header=None):
+    if not os.path.isfile(config_file):
+        logging.error(f'Unable to load {config_file}')
         lines = []
     else:
-        with open(filepath, 'r') as f:
+        with open(config_file, 'r') as f:
             lines = f.read().splitlines()
     config = {item[0].strip():literal_eval(item[1].strip()) for item in
             [line.split('#')[0].split('=') for line in lines if '=' in line.split('#')[0]]}
@@ -149,7 +149,7 @@ def updateConfigFile(filepath, key, value, search_string=None, header=None):
             else:
                 lines += ['', newline]
     # Write updated config file
-    with open(filepath, 'w') as f:
+    with open(config_file, 'w') as f:
         for line in lines:
             f.write(f'{line}\n')
     # Return updated config
@@ -239,29 +239,29 @@ def selectFiles(folder, name=None, num_required=None):
                 first_index += offset
             return (first_index, offset, num_required)
 
-def loadImage(filepath, img_x_bounds=None, img_y_bounds=None):
+def loadImage(config_file, img_x_bounds=None, img_y_bounds=None):
     """Load a single image from file."""
-    if not os.path.isfile(filepath):
-        logging.error(f'Unable to load {filepath}')
+    if not os.path.isfile(config_file):
+        logging.error(f'Unable to load {config_file}')
         return None
-    img_read = img.imread(filepath)
+    img_read = img.imread(config_file)
     if not img_x_bounds:
         img_x_bounds = [0, img_read.shape[0]]
     else:
         if (not isinstance(img_x_bounds, list) or len(img_x_bounds) != 2 or 
                 not (0 <= img_x_bounds[0] < img_x_bounds[1] <= img_read.shape[0])):
-            logging.error(f'inconsistent row dimension in {filepath}')
+            logging.error(f'inconsistent row dimension in {config_file}')
             return None
     if not img_y_bounds:
         img_y_bounds = [0, img_read.shape[1]]
     else:
         if (not isinstance(img_y_bounds, list) or len(img_y_bounds) != 2 or 
                 not (0 <= img_y_bounds[0] < img_y_bounds[1] <= img_read.shape[0])):
-            logging.error(f'inconsistent column dimension in {filepath}')
+            logging.error(f'inconsistent column dimension in {config_file}')
             return None
     return img_read[img_x_bounds[0]:img_x_bounds[1],img_y_bounds[0]:img_y_bounds[1]]
 
-def loadImageStack(img_folder, img_start, num_imgs, num_img_skip=0,
+def loadImageStack(folder, img_start, num_imgs, num_img_skip=0,
         img_x_bounds=None, img_y_bounds=None):
     """Load a set of images and return them as a stack."""
     logging.debug(f'img_start = {img_start}')
@@ -276,12 +276,12 @@ def loadImageStack(img_folder, img_start, num_imgs, num_img_skip=0,
     t0 = time()
     img_read_stack = []
     for i in range(0, num_read):
-        filepath = f'{img_folder}nf_{img_range[i]:06d}.tif'
+        config_file = f'{folder}nf_{img_range[i]:06d}.tif'
         if not (i+1)%20:
-            logging.info(f'    loading {i+1}/{len(img_range)}: {filepath}')
+            logging.info(f'    loading {i+1}/{len(img_range)}: {config_file}')
         else:
-            logging.debug(f'    loading {i+1}/{len(img_range)}: {filepath}')
-        img_read = loadImage(filepath, img_x_bounds, img_y_bounds)
+            logging.debug(f'    loading {i+1}/{len(img_range)}: {config_file}')
+        img_read = loadImage(config_file, img_x_bounds, img_y_bounds)
         img_read_stack.append(img_read)
     img_stack = np.stack([img_read for img_read in img_read_stack])
     logging.info(f'... done in {time()-t0:.2f} seconds!')
@@ -289,9 +289,12 @@ def loadImageStack(img_folder, img_start, num_imgs, num_img_skip=0,
     del img_read_stack, img_read, img_range
     return img_stack
 
-def quickImshow(a, title=None, save_fig=False, save_only=False, clear=True, **kwargs):
+def quickImshow(a, title=None, path='.', save_fig=False, save_only=False, clear=True, **kwargs):
     if title != None and not isinstance(title, str):
         logging.error(f'Illegal entry for title in quickImshow ({title})')
+        return
+    if not isinstance(path, str):
+        logging.error(f'Illegal entry for path in quickImshow ({path})')
         return
     if type(save_fig) != bool:
         logging.error(f'Illegal entry for save_fig in quickImshow ({save_fig})')
@@ -311,22 +314,23 @@ def quickImshow(a, title=None, save_fig=False, save_only=False, clear=True, **kw
     if save_only:
         plt.figure(title)
         plt.imshow(a, **kwargs)
-        if save_fig:
-            plt.savefig(f'{title}.png')
+        plt.savefig(f'{path}/{title}.png')
         plt.close(fig=title)
-        #if save_fig:
-        #    plt.imsave(f'{title}.png', a, **kwargs)
+        #plt.imsave(f'{title}.png', a, **kwargs)
     else:
         plt.ion()
         plt.figure(title)
         plt.imshow(a, **kwargs)
         if save_fig:
-            plt.savefig(f'{title}.png')
+            plt.savefig(f'{path}/{title}.png')
         plt.pause(1)
 
-def quickPlot(*args, title=None, save_fig=False, save_only=False, clear=True, **kwargs):
+def quickPlot(*args, title=None, path='.', save_fig=False, save_only=False, clear=True, **kwargs):
     if title != None and not isinstance(title, str):
         logging.error(f'Illegal entry for title in quickPlot ({title})')
+        return
+    if not isinstance(path, str):
+        logging.error(f'Illegal entry for path in quickImshow ({path})')
         return
     if type(save_fig) != bool:
         logging.error(f'Illegal entry for save_fig in quickPlot ({save_fig})')
@@ -350,8 +354,7 @@ def quickPlot(*args, title=None, save_fig=False, save_only=False, clear=True, **
                plt.plot(*y, **kwargs)
         else:
             plt.plot(*args, **kwargs)
-        if save_fig:
-            plt.savefig(f'{title}.png')
+        plt.savefig(f'{path}/{title}.png')
         plt.close(fig=title)
     else:
         plt.ion()
@@ -362,7 +365,7 @@ def quickPlot(*args, title=None, save_fig=False, save_only=False, clear=True, **
         else:
             plt.plot(*args, **kwargs)
         if save_fig:
-            plt.savefig(f'{title}.png')
+            plt.savefig(f'{path}/{title}.png')
         plt.pause(1)
 
 def selectArrayBounds(a, x_low=None, x_upp=None, num_x_min=None,

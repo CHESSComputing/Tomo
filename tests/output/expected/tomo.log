@@ -1,0 +1,122 @@
+2022-02-01 10:57:26,671 : WARNING - tomo : __init__ - Ignoring command line log_level argument in test mode
+2022-02-01 10:57:26,674 : INFO - tomo : _validateConfig - num_tomo_data_sets = 3
+2022-02-01 10:57:26,678 : INFO - tomo : _validateInputData - tdf_data_folder = /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/369/nf/
+2022-02-01 10:57:26,678 : INFO - tomo : _validateInputData - tbf_data_folder = /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/370/nf/
+2022-02-01 10:57:26,679 : INFO - tomo : _validateInputData - tomography data folders:
+2022-02-01 10:57:26,679 : INFO - tomo : _validateInputData -     /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/
+2022-02-01 10:57:26,679 : INFO - tomo : _validateInputData -     /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/
+2022-02-01 10:57:26,679 : INFO - tomo : _validateInputData -     /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/
+2022-02-01 10:57:26,679 : INFO - tomo : _validateInputData - tomography data folder indices: [0, 1, 2]
+2022-02-01 10:57:26,679 : INFO - tomo : _validateInputData - tomography reference heights: [0.0, 1.0000000000000002, 2.0]
+2022-02-01 10:57:26,753 : INFO - msnc_tools : loadImageStack - Reading 20 images ...
+2022-02-01 10:57:26,882 : INFO - msnc_tools : loadImageStack -     loading 20/20: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/369/nf/nf_223392.tif
+2022-02-01 10:57:26,967 : INFO - msnc_tools : loadImageStack - ... done in 0.21 seconds!
+2022-02-01 10:57:29,515 : INFO - msnc_tools : loadImageStack - Reading 20 images ...
+2022-02-01 10:57:29,652 : INFO - msnc_tools : loadImageStack -     loading 20/20: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/370/nf/nf_223418.tif
+2022-02-01 10:57:29,754 : INFO - msnc_tools : loadImageStack - ... done in 0.24 seconds!
+2022-02-01 10:57:32,268 : INFO - tomo : _setZoomOrSkip - zoom_perc = 100
+2022-02-01 10:57:32,268 : INFO - tomo : _setZoomOrSkip - num_theta_skip = 2
+2022-02-01 10:57:32,279 : INFO - msnc_tools : loadImageStack - Reading 600 images ...
+2022-02-01 10:57:32,400 : INFO - msnc_tools : loadImageStack -     loading 20/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_223482.tif
+2022-02-01 10:57:32,514 : INFO - msnc_tools : loadImageStack -     loading 40/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_223542.tif
+2022-02-01 10:57:32,626 : INFO - msnc_tools : loadImageStack -     loading 60/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_223602.tif
+2022-02-01 10:57:32,735 : INFO - msnc_tools : loadImageStack -     loading 80/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_223662.tif
+2022-02-01 10:57:32,846 : INFO - msnc_tools : loadImageStack -     loading 100/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_223722.tif
+2022-02-01 10:57:32,956 : INFO - msnc_tools : loadImageStack -     loading 120/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_223782.tif
+2022-02-01 10:57:33,068 : INFO - msnc_tools : loadImageStack -     loading 140/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_223842.tif
+2022-02-01 10:57:33,178 : INFO - msnc_tools : loadImageStack -     loading 160/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_223902.tif
+2022-02-01 10:57:33,286 : INFO - msnc_tools : loadImageStack -     loading 180/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_223962.tif
+2022-02-01 10:57:33,393 : INFO - msnc_tools : loadImageStack -     loading 200/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224022.tif
+2022-02-01 10:57:33,502 : INFO - msnc_tools : loadImageStack -     loading 220/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224082.tif
+2022-02-01 10:57:33,610 : INFO - msnc_tools : loadImageStack -     loading 240/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224142.tif
+2022-02-01 10:57:33,719 : INFO - msnc_tools : loadImageStack -     loading 260/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224202.tif
+2022-02-01 10:57:33,828 : INFO - msnc_tools : loadImageStack -     loading 280/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224262.tif
+2022-02-01 10:57:33,938 : INFO - msnc_tools : loadImageStack -     loading 300/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224322.tif
+2022-02-01 10:57:34,045 : INFO - msnc_tools : loadImageStack -     loading 320/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224382.tif
+2022-02-01 10:57:34,155 : INFO - msnc_tools : loadImageStack -     loading 340/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224442.tif
+2022-02-01 10:57:34,264 : INFO - msnc_tools : loadImageStack -     loading 360/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224502.tif
+2022-02-01 10:57:34,373 : INFO - msnc_tools : loadImageStack -     loading 380/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224562.tif
+2022-02-01 10:57:34,484 : INFO - msnc_tools : loadImageStack -     loading 400/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224622.tif
+2022-02-01 10:57:34,594 : INFO - msnc_tools : loadImageStack -     loading 420/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224682.tif
+2022-02-01 10:57:34,699 : INFO - msnc_tools : loadImageStack -     loading 440/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224742.tif
+2022-02-01 10:57:34,806 : INFO - msnc_tools : loadImageStack -     loading 460/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224802.tif
+2022-02-01 10:57:34,911 : INFO - msnc_tools : loadImageStack -     loading 480/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224862.tif
+2022-02-01 10:57:35,016 : INFO - msnc_tools : loadImageStack -     loading 500/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224922.tif
+2022-02-01 10:57:35,128 : INFO - msnc_tools : loadImageStack -     loading 520/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_224982.tif
+2022-02-01 10:57:35,239 : INFO - msnc_tools : loadImageStack -     loading 540/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_225042.tif
+2022-02-01 10:57:35,347 : INFO - msnc_tools : loadImageStack -     loading 560/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_225102.tif
+2022-02-01 10:57:35,458 : INFO - msnc_tools : loadImageStack -     loading 580/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_225162.tif
+2022-02-01 10:57:35,578 : INFO - msnc_tools : loadImageStack -     loading 600/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf/nf_225222.tif
+2022-02-01 10:57:36,667 : INFO - msnc_tools : loadImageStack - ... done in 4.39 seconds!
+2022-02-01 10:57:51,523 : INFO - msnc_tools : loadImageStack - Reading 600 images ...
+2022-02-01 10:57:51,662 : INFO - msnc_tools : loadImageStack -     loading 20/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_225393.tif
+2022-02-01 10:57:51,849 : INFO - msnc_tools : loadImageStack -     loading 40/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_225453.tif
+2022-02-01 10:57:51,965 : INFO - msnc_tools : loadImageStack -     loading 60/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_225513.tif
+2022-02-01 10:57:52,062 : INFO - msnc_tools : loadImageStack -     loading 80/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_225573.tif
+2022-02-01 10:57:52,168 : INFO - msnc_tools : loadImageStack -     loading 100/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_225633.tif
+2022-02-01 10:57:52,284 : INFO - msnc_tools : loadImageStack -     loading 120/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_225693.tif
+2022-02-01 10:57:52,397 : INFO - msnc_tools : loadImageStack -     loading 140/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_225753.tif
+2022-02-01 10:57:52,507 : INFO - msnc_tools : loadImageStack -     loading 160/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_225813.tif
+2022-02-01 10:57:52,621 : INFO - msnc_tools : loadImageStack -     loading 180/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_225873.tif
+2022-02-01 10:57:52,735 : INFO - msnc_tools : loadImageStack -     loading 200/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_225933.tif
+2022-02-01 10:57:52,852 : INFO - msnc_tools : loadImageStack -     loading 220/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_225993.tif
+2022-02-01 10:57:52,968 : INFO - msnc_tools : loadImageStack -     loading 240/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_226053.tif
+2022-02-01 10:57:53,080 : INFO - msnc_tools : loadImageStack -     loading 260/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_226113.tif
+2022-02-01 10:57:53,273 : INFO - msnc_tools : loadImageStack -     loading 280/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_226173.tif
+2022-02-01 10:57:53,426 : INFO - msnc_tools : loadImageStack -     loading 300/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_226233.tif
+2022-02-01 10:57:53,540 : INFO - msnc_tools : loadImageStack -     loading 320/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_226293.tif
+2022-02-01 10:57:53,740 : INFO - msnc_tools : loadImageStack -     loading 340/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_226353.tif
+2022-02-01 10:57:53,884 : INFO - msnc_tools : loadImageStack -     loading 360/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_226413.tif
+2022-02-01 10:57:53,994 : INFO - msnc_tools : loadImageStack -     loading 380/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_226473.tif
+2022-02-01 10:57:54,111 : INFO - msnc_tools : loadImageStack -     loading 400/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_226533.tif
+2022-02-01 10:57:54,305 : INFO - msnc_tools : loadImageStack -     loading 420/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_226593.tif
+2022-02-01 10:57:54,457 : INFO - msnc_tools : loadImageStack -     loading 440/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_226653.tif
+2022-02-01 10:57:54,565 : INFO - msnc_tools : loadImageStack -     loading 460/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_226713.tif
+2022-02-01 10:57:54,745 : INFO - msnc_tools : loadImageStack -     loading 480/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_226773.tif
+2022-02-01 10:57:54,916 : INFO - msnc_tools : loadImageStack -     loading 500/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_226833.tif
+2022-02-01 10:57:55,030 : INFO - msnc_tools : loadImageStack -     loading 520/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_226893.tif
+2022-02-01 10:57:55,138 : INFO - msnc_tools : loadImageStack -     loading 540/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_226953.tif
+2022-02-01 10:57:55,247 : INFO - msnc_tools : loadImageStack -     loading 560/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_227013.tif
+2022-02-01 10:57:55,358 : INFO - msnc_tools : loadImageStack -     loading 580/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_227073.tif
+2022-02-01 10:57:55,470 : INFO - msnc_tools : loadImageStack -     loading 600/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf/nf_227133.tif
+2022-02-01 10:57:56,567 : INFO - msnc_tools : loadImageStack - ... done in 5.04 seconds!
+2022-02-01 10:58:11,175 : INFO - msnc_tools : loadImageStack - Reading 600 images ...
+2022-02-01 10:58:11,287 : INFO - msnc_tools : loadImageStack -     loading 20/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_227304.tif
+2022-02-01 10:58:11,378 : INFO - msnc_tools : loadImageStack -     loading 40/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_227364.tif
+2022-02-01 10:58:11,469 : INFO - msnc_tools : loadImageStack -     loading 60/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_227424.tif
+2022-02-01 10:58:11,563 : INFO - msnc_tools : loadImageStack -     loading 80/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_227484.tif
+2022-02-01 10:58:11,670 : INFO - msnc_tools : loadImageStack -     loading 100/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_227544.tif
+2022-02-01 10:58:11,784 : INFO - msnc_tools : loadImageStack -     loading 120/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_227604.tif
+2022-02-01 10:58:11,901 : INFO - msnc_tools : loadImageStack -     loading 140/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_227664.tif
+2022-02-01 10:58:12,011 : INFO - msnc_tools : loadImageStack -     loading 160/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_227724.tif
+2022-02-01 10:58:12,119 : INFO - msnc_tools : loadImageStack -     loading 180/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_227784.tif
+2022-02-01 10:58:12,228 : INFO - msnc_tools : loadImageStack -     loading 200/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_227844.tif
+2022-02-01 10:58:12,336 : INFO - msnc_tools : loadImageStack -     loading 220/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_227904.tif
+2022-02-01 10:58:12,445 : INFO - msnc_tools : loadImageStack -     loading 240/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_227964.tif
+2022-02-01 10:58:12,552 : INFO - msnc_tools : loadImageStack -     loading 260/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228024.tif
+2022-02-01 10:58:12,659 : INFO - msnc_tools : loadImageStack -     loading 280/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228084.tif
+2022-02-01 10:58:12,811 : INFO - msnc_tools : loadImageStack -     loading 300/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228144.tif
+2022-02-01 10:58:12,921 : INFO - msnc_tools : loadImageStack -     loading 320/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228204.tif
+2022-02-01 10:58:13,034 : INFO - msnc_tools : loadImageStack -     loading 340/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228264.tif
+2022-02-01 10:58:13,140 : INFO - msnc_tools : loadImageStack -     loading 360/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228324.tif
+2022-02-01 10:58:13,248 : INFO - msnc_tools : loadImageStack -     loading 380/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228384.tif
+2022-02-01 10:58:13,363 : INFO - msnc_tools : loadImageStack -     loading 400/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228444.tif
+2022-02-01 10:58:13,472 : INFO - msnc_tools : loadImageStack -     loading 420/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228504.tif
+2022-02-01 10:58:13,580 : INFO - msnc_tools : loadImageStack -     loading 440/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228564.tif
+2022-02-01 10:58:13,688 : INFO - msnc_tools : loadImageStack -     loading 460/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228624.tif
+2022-02-01 10:58:13,804 : INFO - msnc_tools : loadImageStack -     loading 480/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228684.tif
+2022-02-01 10:58:13,920 : INFO - msnc_tools : loadImageStack -     loading 500/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228744.tif
+2022-02-01 10:58:14,040 : INFO - msnc_tools : loadImageStack -     loading 520/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228804.tif
+2022-02-01 10:58:14,150 : INFO - msnc_tools : loadImageStack -     loading 540/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228864.tif
+2022-02-01 10:58:14,258 : INFO - msnc_tools : loadImageStack -     loading 560/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228924.tif
+2022-02-01 10:58:14,365 : INFO - msnc_tools : loadImageStack -     loading 580/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_228984.tif
+2022-02-01 10:58:14,476 : INFO - msnc_tools : loadImageStack -     loading 600/600: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf/nf_229044.tif
+2022-02-01 10:58:15,569 : INFO - msnc_tools : loadImageStack - ... done in 4.39 seconds!
+2022-02-01 10:58:32,055 : INFO - algorithm : _dist_recon - Reconstructing 48 slice groups with 48 master threads...
+2022-02-01 10:58:43,432 : INFO - tomo : reconstructTomoSets - Reconstruction of set 0 took 13.04 seconds!
+2022-02-01 10:58:48,376 : INFO - algorithm : _dist_recon - Reconstructing 48 slice groups with 48 master threads...
+2022-02-01 10:59:00,007 : INFO - tomo : reconstructTomoSets - Reconstruction of set 1 took 13.32 seconds!
+2022-02-01 10:59:05,294 : INFO - algorithm : _dist_recon - Reconstructing 48 slice groups with 48 master threads...
+2022-02-01 10:59:16,763 : INFO - tomo : reconstructTomoSets - Reconstruction of set 2 took 13.42 seconds!
+2022-02-01 10:59:37,105 : INFO - tomo : combineTomoSets - Combining reconstructed sets ...
+2022-02-01 10:59:42,999 : INFO - tomo : combineTomoSets - ... done in 5.89 seconds!

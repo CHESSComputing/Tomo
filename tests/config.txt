@@ -1,0 +1,62 @@
+# Original work folder:
+#   /nfs/chess/raw/2021-3/id3a/z-3234-A/tenstom_1304r-1
+# Work folder for testing purposes:
+#   /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1
+work_folder = '/nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1'
+
+# Locations of tomography dark field images
+tdf_data_folder = 369
+
+# Locations of tomography bright field images
+tbf_data_folder = 370
+
+# Locations of tomography images
+num_tomo_data_sets = 3
+tomo_data_folder_1 = 371
+tomo_data_folder_2 = 376
+tomo_data_folder_3 = 381
+
+# Detector ID
+detector_id = 'retiga'
+
+# Scan parameters
+num_thetas = 1800
+lens_magnification = 5
+z_pos_1 = -2.603
+z_pos_2 = -1.603
+z_pos_3 = -0.603
+
+# Reduced stack parameters
+z_ref_1 = 0.814
+z_ref_2 = 1.814
+z_ref_3 = 2.814
+zoom_perc = 100
+num_theta_skip = 2
+img_x_bounds = [550, 1550]
+y_bounds = [650, 1400]
+
+# Image set info
+tdf_img_start = 223373
+tdf_img_offset = 5
+tdf_num_imgs = 20
+tbf_img_start = 223399
+tbf_img_offset = 5
+tbf_num_imgs = 20
+tomo_img_start_1 = 223425
+tomo_img_offset_1 = 5
+tomo_img_start_2 = 225336
+tomo_img_offset_2 = 5
+tomo_img_start_3 = 227247
+tomo_img_offset_3 = 5
+
+# Calibration center offset info
+center_stack_index = 1
+row_bounds = [162, 838]
+lower_row = 162
+lower_center_offset = 18.5
+upper_row = 837
+upper_center_offset = 39.25
+
+# Combined reconstruction info
+x_bounds = [650, 1400]
+y_bounds = [650, 1400]
