@@ -17,13 +17,14 @@ import imageio as img
 import matplotlib.pyplot as plt
 from time import time
 from ast import literal_eval
+from lmfit.models import StepModel, RectangleModel
 
 def depth_list(L): return isinstance(L, list) and max(map(depth_list, L))+1
 def depth_tuple(T): return isinstance(T, tuple) and max(map(depth_tuple, T))+1
 
 def is_int(v, v_min=None, v_max=None):
     """Value is an integer in range v_min <= v <= v_max"""
-    if type(v) != int:
+    if not isinstance(v, int):
         return False
     if (v_min != None and v < v_min) or (v_max != None and v > v_max):
         return False
@@ -31,7 +32,7 @@ def is_int(v, v_min=None, v_max=None):
 
 def is_num(v, v_min=None, v_max=None):
     """Value is a number in range v_min <= v <= v_max"""
-    if not type(v) in (int,float):
+    if not isinstance(v, (int,float)):
         return False
     if (v_min != None and v < v_min) or (v_max != None and v > v_max):
         return False
@@ -39,7 +40,7 @@ def is_num(v, v_min=None, v_max=None):
 
 def is_index(v, v_min=0, v_max=None):
     """Value is an array index in range v_min <= v < v_max"""
-    if type(v) != int:
+    if not isinstance(v, int):
         return False
     if v < v_min or (v_max != None and v >= v_max):
         return False
@@ -47,7 +48,8 @@ def is_index(v, v_min=0, v_max=None):
 
 def is_index_range(v, v_min=0, v_max=None):
     """Value is an array index range in range v_min <= v[0] <= v[1] < v_max"""
-    if not (type(v) is list and len(v) == 2 and type(v[0]) == int and type(v[1]) == int):
+    if not (isinstance(v, list) and len(v) == 2 and isinstance(v[0], int) and
+            isinstance(v[1], int)):
         return False
     if not 0 <= v[0] < v[1] or (v_max != None and v[1] >= v_max):
         return False
@@ -177,8 +179,7 @@ def selectFiles(folder, name=None, num_required=None):
             return (int(first_index), 0, 1)
     else:
         if not is_int(num_required, 1):
-            logging.error(f'Illegal value of num_required ({num_required}, '+
-                    f'{type(num_required)})')
+            illegal_value('num_required', num_required, 'selectFiles')
             return (0, 0, 0)
         if num_files < num_required:
             logging.error('Unable to find the required'+name+
@@ -291,19 +292,19 @@ def loadImageStack(folder, img_start, num_imgs, num_img_skip=0,
 
 def quickImshow(a, title=None, path='.', save_fig=False, save_only=False, clear=True, **kwargs):
     if title != None and not isinstance(title, str):
-        logging.error(f'Illegal entry for title in quickImshow ({title})')
+        illegal_value('title', title, 'quickImshow')
         return
     if not isinstance(path, str):
-        logging.error(f'Illegal entry for path in quickImshow ({path})')
+        illegal_value('path', path, 'quickImshow')
         return
-    if type(save_fig) != bool:
-        logging.error(f'Illegal entry for save_fig in quickImshow ({save_fig})')
+    if not isinstance(save_fig, bool):
+        illegal_value('save_fig', save_fig, 'quickImshow')
         return
-    if type(save_only) != bool:
-        logging.error(f'Illegal entry for save_only in quickImshow ({save_only})')
+    if not isinstance(save_only, bool):
+        illegal_value('save_only', save_only, 'quickImshow')
         return
-    if type(clear) != bool:
-        logging.error(f'Illegal entry for clear in quickImshow ({clear})')
+    if not isinstance(clear, bool):
+        illegal_value('clear', clear, 'quickImshow')
         return
     if not title:
         title='quick_imshow'
@@ -327,19 +328,19 @@ def quickImshow(a, title=None, path='.', save_fig=False, save_only=False, clear=
 
 def quickPlot(*args, title=None, path='.', save_fig=False, save_only=False, clear=True, **kwargs):
     if title != None and not isinstance(title, str):
-        logging.error(f'Illegal entry for title in quickPlot ({title})')
+        illegal_value('title', title, 'quickImshow')
         return
     if not isinstance(path, str):
-        logging.error(f'Illegal entry for path in quickImshow ({path})')
+        illegal_value('path', path, 'quickImshow')
         return
-    if type(save_fig) != bool:
-        logging.error(f'Illegal entry for save_fig in quickPlot ({save_fig})')
+    if not isinstance(save_fig, bool):
+        illegal_value('save_fig', save_fig, 'quickImshow')
         return
-    if type(save_only) != bool:
-        logging.error(f'Illegal entry for save_only in quickPlot ({save_only})')
+    if not isinstance(save_only, bool):
+        illegal_value('save_only', save_only, 'quickImshow')
         return
-    if type(clear) != bool:
-        logging.error(f'Illegal entry for clear in quickPlot ({clear})')
+    if not isinstance(clear, bool):
+        illegal_value('clear', clear, 'quickImshow')
         return
     if not title:
         title = 'quick_plot'
@@ -399,7 +400,7 @@ def selectArrayBounds(a, x_low=None, x_upp=None, num_x_min=None,
                 break
     else:
         if not is_int(x_low, 0, a.size-num_x_min):
-            logging.error(f'Illegal x_low input in selectArrayBounds ({x_low})')
+            illegal_value('x_low', x_low, 'selectArrayBounds')
             return None
     if x_upp == None:
         x_min = x_low+num_x_min
@@ -420,12 +421,40 @@ def selectArrayBounds(a, x_low=None, x_upp=None, num_x_min=None,
                 break
     else:
         if not is_int(x_upp, x_low+num_x_min, a.size):
-            logging.error(f'Illegal x_upp input in selectArrayBounds ({x_upp})')
+            illegal_value('x_upp', x_upp, 'selectArrayBounds')
             return None
     print(f'lower bound = {x_low} (inclusive)\nupper bound = {x_upp} (exclusive)]')
     bounds = [x_low, x_upp]
-    quickPlot(range(bounds[0], bounds[1]), a[bounds[0]:bounds[1]], title=title)
-    if pyip.inputYesNo('Accept these bounds (y/n)?: ') == 'no':
+    #quickPlot(range(bounds[0], bounds[1]), a[bounds[0]:bounds[1]], title=title)
+    quickPlot((range(a.size), a), ([bounds[0], bounds[0]], [a.min(), a.max()], 'r-'),
+            ([bounds[1], bounds[1]], [a.min(), a.max()], 'r-'), title=title)
+    if pyip.inputYesNo('Accept these bounds ([y]/n)?: ', blank=True) == 'no':
         bounds = selectArrayBounds(a, title=title)
     return bounds
+
+def fitStep(x=None, y=None, model='step', form='arctan'):
+    if not isinstance(y, np.ndarray) or y.ndim != 1:
+        logging.error('Illegal array type or dimension for y in fitStep')
+        return
+    if isinstance(x, type(None)):
+        x = np.array(range(y.size))
+    elif not isinstance(x, np.ndarray) or x.ndim != 1 or x.size != y.size:
+        logging.error('Illegal array type or dimension for x in fitStep')
+        return
+    if not isinstance(model, str) or not model in ('step', 'rectangle'):
+        illegal_value('model', model, 'fitStepModel')
+        return
+    if not isinstance(form, str) or not form in ('linear', 'atan', 'arctan', 'erf', 'logistic'):
+        illegal_value('form', form, 'fitStepModel')
+        return
+
+    if model == 'step':
+        mod = StepModel(form=form)
+    else:
+        mod = RectangleModel(form=form)
+    pars = mod.guess(y, x=x)
+    out  = mod.fit(y, pars, x=x)
+    #print(out.fit_report())
+    #quickPlot((x,y),(x,out.best_fit))
+    return out.best_values
 

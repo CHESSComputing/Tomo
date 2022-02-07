@@ -22,6 +22,9 @@ env:
 	ksu $(conda_user) -e /usr/bin/cp environment.yml $(conda_base)/tomopy.yml
 	ksu $(conda_user) -e $(conda_base)/bin/conda env remove -n tomopy
 	ksu $(conda_user) -e $(conda_base)/bin/conda env create -f $(conda_base)/tomopy.yml
+	ksu $(conda_user) -e /usr/bin/cp environment-spyder.yml $(conda_base)/tomopy-spyder.yml
+	ksu $(conda_user) -e $(conda_base)/bin/conda env remove -n tomopy-spyder
+	ksu $(conda_user) -e $(conda_base)/bin/conda env create -f $(conda_base)/tomopy-spyder.yml
 
 clean:
 	find . -name "*~" -delete
