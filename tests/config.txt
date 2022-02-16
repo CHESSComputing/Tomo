@@ -26,15 +26,6 @@ z_pos_1 = -2.603
 z_pos_2 = -1.603
 z_pos_3 = -0.603
 
-# Reduced stack parameters
-z_ref_1 = 0.814
-z_ref_2 = 1.814
-z_ref_3 = 2.814
-zoom_perc = 100
-num_theta_skip = 2
-img_x_bounds = [550, 1550]
-y_bounds = [650, 1400]
-
 # Image set info
 tdf_img_start = 223373
 tdf_img_offset = 5
@@ -49,13 +40,21 @@ tomo_img_offset_2 = 5
 tomo_img_start_3 = 227247
 tomo_img_offset_3 = 5
 
+# Reduced stack parameters
+zoom_perc = 100
+num_theta_skip = 0
+img_x_bounds = [538, 1571]
+z_ref_1 = 0.79624
+z_ref_2 = 1.79624
+z_ref_3 = 2.79624
+
 # Calibration center offset info
 center_stack_index = 1
-row_bounds = [162, 838]
-lower_row = 162
-lower_center_offset = 18.5
-upper_row = 837
-upper_center_offset = 39.25
+row_bounds = [179, 854]
+lower_row = 179
+lower_center_offset = 18.0
+upper_row = 853
+upper_center_offset = 39.5
 
 # Combined reconstruction info
 x_bounds = [650, 1400]

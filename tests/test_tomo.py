@@ -1,12 +1,15 @@
 import os
 import sys
+import re
+import statistics
+import unittest
+from ast import literal_eval
+
+from tomo import runTomo
+
 work_dir = os.path.realpath(os.getcwd())
 if work_dir[-1] != '/':
     work_dir += '/'
-
-import unittest
-import filecmp
-from tomo import runTomo
 
 class TomoTestCase(unittest.TestCase):
 
@@ -30,12 +33,32 @@ class TomoTestCase(unittest.TestCase):
             exp_fpath = os.path.join(exp_dir, f)
             act_fpath = os.path.join(act_dir, f)
             self.assertTrue(os.path.isfile(os.path.join(act_dir, f)))
-            with open(exp_fpath) as exp_f:
-                exp_fstr = exp_f.read()
-            with open(act_fpath) as act_f:
-                act_fstr = act_f.read()
-            print(f'Comparing {exp_fpath}\n    and {act_fpath}...')
-            self.assertEqual(exp_fstr, act_fstr)
+            with open(exp_fpath) as f:
+                exp_items = re.findall(r'\S+', f.read())
+            with open(act_fpath) as f:
+                act_items = re.findall(r'\S+', f.read())
+            self.assertEqual(len(act_items), len(exp_items))
+            err = []
+            for (exp_item, act_item) in zip(exp_items, act_items):
+                try:
+                    e = literal_eval(exp_item)
+                    a = literal_eval(act_item)
+                except (ValueError, TypeError, SyntaxError, MemoryError):
+                    continue
+                if e and a:
+                    err.append((a-e)/e)
+                else:
+                    err.append(a-e)
+                #self.assertAlmostEqual(err, 0, 2)
+            print(f'\nfile: {f}')
+            print(f'min {min(err)}')
+            print(f'max {max(err)}')
+            print(f'mean {statistics.mean(err)}')
+            print(f'median {statistics.median(err)}')
+            print(f'stdev {statistics.stdev(err)}\n')
+            self.assertEqual(statistics.median(err), 0.0)
+            self.assertAlmostEqual(statistics.mean(err), 0, 6)
+
 
 if __name__ == '__main__':
-    tomo_test_case = TomoTestCase()
+    unittest.main()

@@ -30,6 +30,6 @@ clean:
 	find . -name "*~" -delete
 	find . -type f -name "*.py[co]" -delete
 	find . -type d -name "__pycache__" -delete
-	find . -type d -name "tests/output/actual" -delete
+	find tests -type d -name "actual" -delete
 
 deploy: clean env

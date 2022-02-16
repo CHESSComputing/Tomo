@@ -127,6 +127,11 @@ class Tomo:
             logging.error(f'Missing input item(s): {", ".join(pars_missing)}')
         self.is_valid = is_valid and self.is_valid
 
+        logging.info(f'ncore = {self.ncore}')
+        logging.info(f'save_plots = {self.save_plots}')
+        logging.info(f'save_plots_only = {self.save_plots_only}')
+        logging.info(f'test_mode = {self.test_mode}')
+
     def _loadConfigFile(self, config_file):
         '''Takes the full/relative path to a text or yml file and loads it into 
         the dictionary self.config'''
@@ -613,8 +618,9 @@ class Tomo:
         logging.debug(f'tdf_cutoff = {tdf_cutoff}')
         logging.debug(f'tdf_mean = {tdf_mean}')
         np.nan_to_num(self.tdf, copy=False, nan=tdf_mean, posinf=tdf_mean, neginf=0.)
-        msnc.quickImshow(self.tdf, title='dark field', path=self.output_folder,
-                save_fig=self.save_plots, save_only=self.save_plots_only)
+        if not self.test_mode:
+            msnc.quickImshow(self.tdf, title='dark field', path=self.output_folder,
+                    save_fig=self.save_plots, save_only=self.save_plots_only)
 
     def _genBright(self):
         """Generate bright field."""
@@ -649,11 +655,16 @@ class Tomo:
         if not self.tdf.size:
             raise ValueError('Dark field unavailable')
         self.tbf -= self.tdf
-        msnc.quickImshow(self.tbf, title='bright field', path=self.output_folder,
-                save_fig=self.save_plots, save_only=self.save_plots_only)
+        if not self.test_mode:
+            msnc.quickImshow(self.tbf, title='bright field', path=self.output_folder,
+                    save_fig=self.save_plots, save_only=self.save_plots_only)
 
     def _setDetectorBounds(self):
         """Set vertical detector bounds for image stack."""
+        img_x_bounds = self.config.get('img_x_bounds', [None, None])
+        if self.test_mode:
+            self.img_x_bounds = img_x_bounds
+            return
         # Check reference heights
         if self.pixel_size == None:
             raise ValueError('pixel_size unavailable')
@@ -670,7 +681,6 @@ class Tomo:
             if num_x_min > self.tbf.shape[0]:
                 logging.warning('Image bounds and pixel size prevent seamless stacking')
                 num_x_min = self.tbf.shape[0]
-        img_x_bounds = self.config.get('img_x_bounds', [None, None])
         print('\nSelect image bounds from bright field')
         msnc.quickImshow(self.tbf, title='bright field')
         tbf_x_sum = np.sum(self.tbf, 1)
@@ -880,8 +890,9 @@ class Tomo:
                 title = 'red stack fullres'
             else:
                 title = f'red stack fullres {1+self.tomo_data_indices[i]}'
-            msnc.quickImshow(tomo_stack[0,:,:], title=title, path=self.output_folder,
-                    save_fig=self.save_plots, save_only=self.save_plots_only)
+            if not self.test_mode:
+                msnc.quickImshow(tomo_stack[0,:,:], title=title, path=self.output_folder,
+                        save_fig=self.save_plots, save_only=self.save_plots_only)
             if zoom_perc != 100:
                 t0 = time()
                 logging.info(f'Zooming in ...')
@@ -895,8 +906,9 @@ class Tomo:
                 title = f'red stack {zoom_perc}p'
                 if self.tomo_data_indices[i] != None:
                     title += f' {1+self.tomo_data_indices[i]}'
-                msnc.quickImshow(tomo_stack[0,:,:], title=title, path=self.output_folder,
-                        save_fig=self.save_plots, save_only=self.save_plots_only)
+                if not self.test_mode:
+                    msnc.quickImshow(tomo_stack[0,:,:], title=title, path=self.output_folder,
+                            save_fig=self.save_plots, save_only=self.save_plots_only)
     
             # Convert tomography stack from theta,row,column to row,theta,column
             tomo_stack = np.swapaxes(tomo_stack, 0, 1)
@@ -1071,9 +1083,10 @@ class Tomo:
             #options = {'method':'SIRT_CUDA', 'proj_type':'cuda', 'num_iter':secondary_iter}
             #RV: doesn't work for me: "Error: CUDA error 803: system has unsupported display driver /
             #                          cuda driver combination."
+            #options = {'method':'SIRT', 'proj_type':'linear', 'MinConstraint': 0, 'num_iter':secondary_iter}
+            #SIRT did not finish while running overnight
             #options = {'method':'SART', 'proj_type':'linear', 'num_iter':secondary_iter}
             options = {'method':'SART', 'proj_type':'linear', 'MinConstraint': 0, 'num_iter':secondary_iter}
-            #options = {'method':'SIRT', 'proj_type':'linear', 'MinConstraint': 0, 'num_iter':secondary_iter}
             tomo_recon_stack  = tomopy.recon(tomo_stack, thetas, centers, init_recon=tomo_recon_stack,
                     options=options, sinogram_order=True, algorithm=tomopy.astra, ncore=ncore)
         if True:
@@ -1433,25 +1446,25 @@ class Tomo:
                 self.tomo_recon_sets[i]= self._reconstructOneTomoSet(self.tomo_sets[i], thetas,
                         center_offsets=center_offsets, sigma=0.1, ncore=self.ncore,
                         algorithm='gridrec', run_secondary_sirt=True, secondary_iter=25)
-                logging.info(f'Reconstruction of set {i} took {time()-t0:.2f} seconds!')
-                row_slice = int(self.tomo_sets[i].shape[0]/2) 
-                if self.tomo_data_indices[i] == None:
-                    title = f'{basetitle} slice{row_slice}'
-                else:
-                    title = f'{basetitle} {1+self.tomo_data_indices[i]} slice{row_slice}'
-                msnc.quickImshow(self.tomo_recon_sets[i][row_slice,:,:], title=title,
-                        path=self.output_folder, save_fig=self.save_plots,
-                        save_only=self.save_plots_only)
-                msnc.quickPlot(self.tomo_recon_sets[i]
-                        [row_slice,int(self.tomo_recon_sets[i].shape[2]/2),:],
-                        title=f'{title} cut{int(self.tomo_recon_sets[i].shape[2]/2)}',
-                        path=self.output_folder, save_fig=self.save_plots,
-                        save_only=self.save_plots_only)
+                logging.info(f'Reconstruction of set {i+1} took {time()-t0:.2f} seconds!')
                 if not self.test_mode:
+                    row_slice = int(self.tomo_sets[i].shape[0]/2) 
+                    if self.tomo_data_indices[i] == None:
+                        title = f'{basetitle} slice{row_slice}'
+                    else:
+                        title = f'{basetitle} {1+self.tomo_data_indices[i]} slice{row_slice}'
+                    msnc.quickImshow(self.tomo_recon_sets[i][row_slice,:,:], title=title,
+                            path=self.output_folder, save_fig=self.save_plots,
+                            save_only=self.save_plots_only)
+                    msnc.quickPlot(self.tomo_recon_sets[i]
+                            [row_slice,int(self.tomo_recon_sets[i].shape[2]/2),:],
+                            title=f'{title} cut{int(self.tomo_recon_sets[i].shape[2]/2)}',
+                            path=self.output_folder, save_fig=self.save_plots,
+                            save_only=self.save_plots_only)
                     self._saveTomo('recon stack', self.tomo_recon_sets[i], i)
-                else:
-                    np.savetxt(self.output_folder+f'recon_stack_{1+self.tomo_data_indices[i]}.txt',
-                            self.tomo_recon_sets[i][row_slice,:,:], fmt='%.6e')
+#                else:
+#                    np.savetxt(self.output_folder+f'recon_stack_{1+self.tomo_data_indices[i]}.txt',
+#                            self.tomo_recon_sets[i][row_slice,:,:], fmt='%.6e')
                 self.tomo_sets[i] = np.array([])
 
         # Update config file
