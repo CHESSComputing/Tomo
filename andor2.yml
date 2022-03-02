@@ -1,0 +1,6 @@
+detector:
+  id: andor2
+  pixels:
+    rows: 1436
+    columns: 1700
+    size: [0.0065, 0.0065]

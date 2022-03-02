@@ -11,6 +11,7 @@ import logging
 import os
 import sys
 import re
+import h5py
 import pyinputplus as pyip
 import numpy as np
 import imageio as img
@@ -158,111 +159,132 @@ def updateConfigFile(config_file, key, value, search_string=None, header=None):
     config['key'] = value
     return config
 
-def selectFiles(folder, name=None, num_required=None):
-    indexRegex = re.compile(r'\d+')
-    files = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f)) and
-            f.endswith('.tif') and indexRegex.search(f)]
-    num_files = len(files)
+def selectImageRange(path, filetype, name=None, num_required=None):
     if isinstance(name, str):
         name = f' {name} '
     else:
         name = ' '
-    if len(files) < 1:
+
+    # Find available index range
+    if filetype == 'tif':
+        if not isinstance(path, str) and not os.path.isdir(path):
+            illegal_value('path', path, 'selectImageRange')
+            return (0, 0, 0)
+        indexRegex = re.compile(r'\d+')
+        # At this point only tiffs
+        files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and
+                f.endswith('.tif') and indexRegex.search(f)]
+        num_files = len(files)
+        if num_files < 1:
+            logging.warning('No available'+name+'files')
+            return (0, 0, 0)
+        files.sort()
+        first_index = indexRegex.search(files[0]).group()
+        last_index = indexRegex.search(files[-1]).group()
+        if first_index == None or last_index == None:
+            logging.error('Unable to find correctly indexed'+name+'images')
+            return (0, 0, 0)
+        first_index = int(first_index)
+        last_index = int(last_index)
+        if num_files != last_index-first_index+1:
+            logging.warning('Non-consecutive set of indices for'+name+'images')
+    elif filetype == 'h5':
+        if not isinstance(path, str) or not os.path.isfile(path):
+            illegal_value('path', path, 'selectImageRange')
+            return (0, 0, 0)
+        # At this point only h5 in alamo2 detector style
+        first_index = 0
+        with h5py.File(path, 'r') as f:
+            num_files = f['entry/instrument/detector/data'].shape[0]
+            last_index = num_files-1
+    else:
+        illegal_value('filetype', filetype, 'selectImageRange')
+        return (0, 0, 0)
+
+    # Check range against requirements
+    if num_files < 1:
         logging.warning('No available'+name+'files')
         return (0, 0, 0)
     if num_required == None:
-        if len(files) == 1:
-            first_index = indexRegex.search(files[0]).group()
-            if first_index == None:
-                logging.error('Unable to find correctly indexed'+name+'images')
-                return (0, 0, 0)
-            return (int(first_index), 0, 1)
+        if num_files == 1:
+            return (first_index, 0, 1)
     else:
         if not is_int(num_required, 1):
-            illegal_value('num_required', num_required, 'selectFiles')
+            illegal_value('num_required', num_required, 'selectImageRange')
             return (0, 0, 0)
         if num_files < num_required:
             logging.error('Unable to find the required'+name+
                     f'images ({num_files} out of {num_required})')
             return (0, 0, 0)
-    files.sort()
-    first_index = indexRegex.search(files[0]).group()
-    last_index = indexRegex.search(files[-1]).group()
-    if first_index == None or last_index == None:
-        logging.error('Unable to find correctly indexed'+name+'images')
-        return (0, 0, 0)
-    else:
-        first_index = int(first_index)
-        last_index = int(last_index)
-        if len(files) != last_index-first_index+1:
-            logging.warning('Non-consecutive set of indices for'+name+'images')
-        if num_required and last_index-first_index+1 < num_required:
-            logging.error('Unable to find the required'+name+
-                    f'images ({last_index-first_index+1} out of {num_required})')
-            return (0, 0, 0)
-        print('\nNumber of available'+name+f'images: {len(files)}')
-        print('Index range of available'+name+f'images: [{first_index}, '+
-                f'{last_index}]')
-        if num_required == None:
-            use_all = f'Use all ([{first_index}, {last_index}])'
-            pick_offset = 'Pick a starting index offset and a number of images'
-            pick_bounds = 'Pick the first and last index'
-            menuchoice = pyip.inputMenu([use_all, pick_offset, pick_bounds], numbered=True)
-            if menuchoice == use_all:
-                return (first_index, 0, len(files))
-            elif menuchoice == pick_offset:
-                offset = pyip.inputInt('Enter the starting index offset'+
-                        f' [0, {last_index-first_index}]: ', min=0,
-                        max=last_index-first_index)
-                first_index += offset
-                if first_index == last_index:
-                    return (first_index, offset, 1)
-                else:
-                    return (first_index, offset, pyip.inputInt('Enter the number of images'+
-                            f' [1, {last_index-first_index+1}]: ', min=1,
-                            max=last_index-first_index+1))
-            else:
-                offset = -first_index+pyip.inputInt('Enter the starting index '+
-                        f'[{first_index}, {last_index}]: ', min=first_index, max=last_index)
-                first_index += offset
-                return (first_index, offset, pyip.inputInt('Enter the last index '+
-                        f'[{first_index}, {last_index}]: ', min=first_index,
-                        max=last_index)-first_index+1)
-        else:
-            use_all = f'Use ([{first_index}, {first_index+num_required-1}])'
-            pick_offset = 'Pick a starting index offset'
-            menuchoice = pyip.inputMenu([use_all, pick_offset], numbered=True)
-            offset = 0
-            if menuchoice == pick_offset:
-                offset = pyip.inputInt('Enter the starting index offset'+
-                        f'[0, {last_index-first_index-num_required}]: ',
-                        min=0, max=last_index-first_index-num_required)
-                first_index += offset
-            return (first_index, offset, num_required)
 
-def loadImage(config_file, img_x_bounds=None, img_y_bounds=None):
+    # Select index range
+    if num_required and last_index-first_index+1 < num_required:
+        logging.error('Unable to find the required'+name+
+                f'images ({last_index-first_index+1} out of {num_required})')
+        return (0, 0, 0)
+    print('\nNumber of available'+name+f'images: {num_files}')
+    print('Index range of available'+name+f'images: [{first_index}, '+
+            f'{last_index}]')
+    if num_required == None:
+        use_all = f'Use all ([{first_index}, {last_index}])'
+        pick_offset = 'Pick a starting index offset and a number of images'
+        pick_bounds = 'Pick the first and last index'
+        menuchoice = pyip.inputMenu([use_all, pick_offset, pick_bounds], numbered=True)
+        if menuchoice == use_all:
+            return (first_index, 0, num_files)
+        elif menuchoice == pick_offset:
+            offset = pyip.inputInt('Enter the starting index offset'+
+                    f' [0, {last_index-first_index}]: ', min=0,
+                    max=last_index-first_index)
+            first_index += offset
+            if first_index == last_index:
+                return (first_index, offset, 1)
+            else:
+                return (first_index, offset, pyip.inputInt('Enter the number of images'+
+                        f' [1, {last_index-first_index+1}]: ', min=1,
+                        max=last_index-first_index+1))
+        else:
+            offset = -first_index+pyip.inputInt('Enter the starting index '+
+                    f'[{first_index}, {last_index}]: ', min=first_index, max=last_index)
+            first_index += offset
+            return (first_index, offset, pyip.inputInt('Enter the last index '+
+                    f'[{first_index}, {last_index}]: ', min=first_index,
+                    max=last_index)-first_index+1)
+    else:
+        use_all = f'Use ([{first_index}, {first_index+num_required-1}])'
+        pick_offset = 'Pick a starting index offset'
+        menuchoice = pyip.inputMenu([use_all, pick_offset], numbered=True)
+        offset = 0
+        if menuchoice == pick_offset:
+            offset = pyip.inputInt('Enter the starting index offset'+
+                    f'[0, {last_index-first_index-num_required+1}]: ',
+                    min=0, max=last_index-first_index-num_required+1)
+            first_index += offset
+        return (first_index, offset, num_required)
+
+def loadImage(f, img_x_bounds=None, img_y_bounds=None):
     """Load a single image from file."""
-    if not os.path.isfile(config_file):
-        logging.error(f'Unable to load {config_file}')
+    if not os.path.isfile(f):
+        logging.error(f'Unable to load {f}')
         return None
-    img_read = img.imread(config_file)
+    img_read = img.imread(f)
     if not img_x_bounds:
         img_x_bounds = [0, img_read.shape[0]]
     else:
         if (not isinstance(img_x_bounds, list) or len(img_x_bounds) != 2 or 
                 not (0 <= img_x_bounds[0] < img_x_bounds[1] <= img_read.shape[0])):
-            logging.error(f'inconsistent row dimension in {config_file}')
+            logging.error(f'inconsistent row dimension in {f}')
             return None
     if not img_y_bounds:
         img_y_bounds = [0, img_read.shape[1]]
     else:
         if (not isinstance(img_y_bounds, list) or len(img_y_bounds) != 2 or 
                 not (0 <= img_y_bounds[0] < img_y_bounds[1] <= img_read.shape[0])):
-            logging.error(f'inconsistent column dimension in {config_file}')
+            logging.error(f'inconsistent column dimension in {f}')
             return None
     return img_read[img_x_bounds[0]:img_x_bounds[1],img_y_bounds[0]:img_y_bounds[1]]
 
-def loadImageStack(folder, img_start, num_imgs, num_img_skip=0,
+def loadImageStack(path, filetype, img_start, num_imgs, num_img_skip=0,
         img_x_bounds=None, img_y_bounds=None):
     """Load a set of images and return them as a stack."""
     logging.debug(f'img_start = {img_start}')
@@ -274,20 +296,52 @@ def loadImageStack(folder, img_start, num_imgs, num_img_skip=0,
         logging.info(f'Reading {num_read} image ...')
     else:
         logging.info(f'Reading {num_read} images ...')
-    t0 = time()
-    img_read_stack = []
-    for i in range(0, num_read):
-        config_file = f'{folder}nf_{img_range[i]:06d}.tif'
-        if not (i+1)%20:
-            logging.info(f'    loading {i+1}/{len(img_range)}: {config_file}')
-        else:
-            logging.debug(f'    loading {i+1}/{len(img_range)}: {config_file}')
-        img_read = loadImage(config_file, img_x_bounds, img_y_bounds)
-        img_read_stack.append(img_read)
-    img_stack = np.stack([img_read for img_read in img_read_stack])
-    logging.info(f'... done in {time()-t0:.2f} seconds!')
-    logging.debug(f'img_stack shape = {np.shape(img_stack)}')
-    del img_read_stack, img_read, img_range
+    img_stack = np.array([])
+    if filetype == 'tif':
+        if not isinstance(path, str) and not os.path.isdir(path):
+            illegal_value('path', path, 'loadImageStack')
+            return img_stack
+        t0 = time()
+        img_read_stack = []
+        for i in range(0, num_read):
+            f = f'{folder}nf_{img_range[i]:06d}.tif'
+            if not (i+1)%20:
+                logging.info(f'    loading {i+1}/{len(img_range)}: {f}')
+            else:
+                logging.debug(f'    loading {i+1}/{len(img_range)}: {f}')
+            img_read = loadImage(f, img_x_bounds, img_y_bounds)
+            img_read_stack.append(img_read)
+        img_stack = np.stack([img_read for img_read in img_read_stack])
+        logging.info(f'... done in {time()-t0:.2f} seconds!')
+        logging.debug(f'img_stack shape = {np.shape(img_stack)}')
+        del img_read_stack, img_read
+    elif filetype == 'h5':
+        if not isinstance(path, str) and not os.path.isfile(path):
+            illegal_value('path', path, 'loadImageStack')
+            return img_stack
+        t0 = time()
+        with h5py.File(path, 'r') as f:
+            shape = f['entry/instrument/detector/data'].shape
+            if len(shape) != 3:
+                logging.error(f'inconsistent dimensions in {path}')
+            if not img_x_bounds:
+                img_x_bounds = [0, shape[1]]
+            else:
+                if (not isinstance(img_x_bounds, list) or len(img_x_bounds) != 2 or 
+                        not (0 <= img_x_bounds[0] < img_x_bounds[1] <= shape[1])):
+                    logging.error(f'inconsistent row dimension in {path}')
+            if not img_y_bounds:
+                img_y_bounds = [0, shape[2]]
+            else:
+                if (not isinstance(img_y_bounds, list) or len(img_y_bounds) != 2 or 
+                        not (0 <= img_y_bounds[0] < img_y_bounds[1] <= shape[2])):
+                    logging.error(f'inconsistent column dimension in {path}')
+            img_stack = f.get('entry/instrument/detector/data')[
+                    img_start:img_start+num_imgs:num_img_skip+1,
+                    img_x_bounds[0]:img_x_bounds[1],img_y_bounds[0]:img_y_bounds[1]]
+        logging.info(f'... done in {time()-t0:.2f} seconds!')
+    else:
+        illegal_value('filetype', filetype, 'selectImageRange')
     return img_stack
 
 def quickImshow(a, title=None, path='.', save_fig=False, save_only=False, clear=True, **kwargs):
@@ -368,6 +422,87 @@ def quickPlot(*args, title=None, path='.', save_fig=False, save_only=False, clea
         if save_fig:
             plt.savefig(f'{path}/{title}.png')
         plt.pause(1)
+
+def selectImageBounds(a, axis, low=None, upp=None, num_min=None,
+        title='select array bounds'):
+    """Interactively select the lower and upper data bounds for a 2D numpy array."""
+    if not isinstance(a, np.ndarray) or a.ndim != 2:
+        logging.error('Illegal array type or dimension in selectImageBounds')
+        return None
+    if axis < 0 or axis >= a.ndim:
+        illegal_value('axis', axis, 'selectImageBounds')
+        return None
+    if num_min == None:
+        num_min = 1
+    else:
+        if num_min < 2 or num_min > a.shape[axis]:
+            logging.warning('Illegal input for num_min in selectImageBounds, input ignored')
+            num_min = 1
+    if low == None:
+        min_ = 0
+        max_ = a.shape[axis]
+        low_max = a.shape[axis]-num_min
+        while True:
+            if axis:
+                quickImshow(a[:,min_:max_], title=title, aspect='auto',
+                        extent=[min_,max_,a.shape[0],0])
+            else:
+                quickImshow(a[min_:max_,:], title=title, aspect='auto',
+                        extent=[0,a.shape[1], max_,min_])
+            zoom_flag = pyip.inputInt('Set lower data bound (0) or zoom in (1)?: ',
+                    min=0, max=1)
+            if zoom_flag:
+                min_ = pyip.inputInt(f'    Set lower zoom index [0, {low_max}]: ',
+                        min=0, max=low_max)
+                max_ = pyip.inputInt(f'    Set upper zoom index [{min_+1}, {low_max+1}]: ',
+                        min=min_+1, max=low_max+1)
+            else:
+                low = pyip.inputInt(f'    Set lower data bound [0, {low_max}]: ',
+                        min=0, max=low_max)
+                break
+    else:
+        if not is_int(low, 0, a.shape[axis]-num_min):
+            illegal_value('low', low, 'selectImageBounds')
+            return None
+    if upp == None:
+        min_ = low+num_min
+        max_ = a.shape[axis]
+        upp_min = min_
+        while True:
+            if axis:
+                quickImshow(a[:,min_:max_], title=title, aspect='auto',
+                        extent=[min_,max_,a.shape[0],0])
+            else:
+                quickImshow(a[min_:max_,:], title=title, aspect='auto',
+                        extent=[0,a.shape[1], max_,min_])
+            zoom_flag = pyip.inputInt('Set upper data bound (0) or zoom in (1)?: ',
+                    min=0, max=1)
+            if zoom_flag:
+                min_ = pyip.inputInt(f'    Set upper zoom index [{upp_min}, {a.shape[axis]-1}]: ',
+                        min=upp_min, max=a.shape[axis]-1)
+                max_ = pyip.inputInt(f'    Set upper zoom index [{min_+1}, {a.shape[axis]}]: ',
+                        min=min_+1, max=a.shape[axis])
+            else:
+                upp = pyip.inputInt(f'    Set upper data bound [{upp_min}, {a.shape[axis]}]: ',
+                        min=upp_min, max=a.shape[axis])
+                break
+    else:
+        if not is_int(upp, low+num_min, a.shape[axis]):
+            illegal_value('upp', upp, 'selectImageBounds')
+            return None
+    print(f'lower bound = {low} (inclusive)\nupper bound = {upp} (exclusive)')
+    bounds = [low, upp]
+    a_tmp = a
+    if axis:
+        a_tmp[:,bounds[0]] = a.max()
+        a_tmp[:,bounds[1]] = a.max()
+    else:
+        a_tmp[bounds[0],:] = a.max()
+        a_tmp[bounds[1],:] = a.max()
+    quickImshow(a_tmp, title=title)
+    if pyip.inputYesNo('Accept these bounds ([y]/n)?: ', blank=True) == 'no':
+        bounds = selectImageBounds(a, title=title)
+    return bounds
 
 def selectArrayBounds(a, x_low=None, x_upp=None, num_x_min=None,
         title='select array bounds'):

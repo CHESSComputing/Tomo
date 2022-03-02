@@ -46,7 +46,7 @@ class set_numexpr_threads:
 class Tomo:
     """Processing tomography data with misalignment."""
     
-    def __init__(self, config_file=None, config_dict=None, output_folder='./',log_level='INFO',
+    def __init__(self, config_file=None, config_dict=None, output_folder='.',log_level='INFO',
             test_mode=False):
         """Initialize with optional config input file or dictionary"""
         self.ncore = mp.cpu_count()
@@ -61,16 +61,16 @@ class Tomo:
         self.pixel_size = None
         self.img_x_bounds = None
         self.img_y_bounds = None
-        self.work_folder = None
-        self.tdf_data_folder = None
+        self.data_filetype = None
+        self.tdf_data_path = None
         self.tdf_img_start = None
         self.tdf_num_imgs = 0
         self.tdf = np.array([])
-        self.tbf_data_folder = None
+        self.tbf_data_path = None
         self.tbf_img_start = None
         self.tbf_num_imgs = 0
         self.tbf = np.array([])
-        self.tomo_data_folders = []
+        self.tomo_data_paths = []
         self.tomo_data_indices = []
         self.tomo_ref_heights = []
         self.tomo_img_starts = []
@@ -172,8 +172,9 @@ class Tomo:
 
         is_valid = True
 
-        # Check fo required first-level keys
-        pars_needed = ['tdf_data_folder', 'tbf_data_folder', 'detector_id']
+        # Check for required first-level keys
+        #RV TODO FIX pars_needed = ['tdf_data_path', 'tbf_data_path', 'detector_id']
+        pars_needed = ['tbf_data_path', 'detector_id']
         pars_missing.extend([p for p in pars_needed if p not in self.config])
         if len(pars_missing) > 0:
             is_valid = False
@@ -317,103 +318,117 @@ class Tomo:
 
         is_valid = True
         
-        # Check work_folder
-        self.work_folder = self.config.get('work_folder', '')
-        if len(self.work_folder):
-            if isinstance(self.work_folder, str):
-                if len(self.work_folder) > 0 and self.work_folder[-1] != '/':
-                    self.work_folder += '/'
-            else:
-                msnc.illegal_value('work_folder', self.work_folder, 'config file')
-            if not os.path.isdir(self.work_folder):
-                logging.error(f'Invalid work folder in config file ({self.work_folder})')
-                is_valid = False
-        else:
-            logging.warning('Missing work folder in config file, folder names must '+
-                    'be absolute paths')
+        # Check data filetype
+        self.data_filetype = self.config.get('data_filetype', 'tif')
+        if not isinstance(self.data_filetype, str) or (self.data_filetype != 'tif' and
+                self.data_filetype != 'h5'):
+            msnc.illegal_value('data_filetype', self.data_filetype, 'config file')
+            return False
+        logging.info(f'data filetype: {self.data_filetype}')
 
-        # Find tomography dark field images folder
-        self.tdf_data_folder = self.config.get('tdf_data_folder')
-        if self.tdf_data_folder == None:
-            pars_missing.append('tdf_data_folder')
+        # Check work_folder
+        work_folder = os.path.abspath(self.config.get('work_folder', ''))
+        if not os.path.isdir(work_folder):
+            msnc.illegal_value('work_folder', work_folder, 'config file')
+            is_valid = False
+
+        # Find tomography dark field images file/folder
+        self.tdf_data_path = self.config.get('tdf_data_path')
+        if self.tdf_data_path == None:
+            pass
+            #pars_missing.append('tdf_data_path')
         else:
-            if isinstance(self.tdf_data_folder, int):
-                self.tdf_data_folder = f'{self.tdf_data_folder}/nf/'
-            elif not (isinstance(self.tdf_data_folder, str) and len(self.tdf_data_folder)):
-                msnc.illegal_value('tdf_data_folder', self.tdf_data_folder, 'config file')
-                is_valid = False
-            self.tdf_data_folder = self.work_folder+self.tdf_data_folder
-            if len(self.tdf_data_folder) > 0 and self.tdf_data_folder[-1] != '/':
-                self.tdf_data_folder += '/'
-            if not os.path.isdir(self.tdf_data_folder):
-                logging.error('Invalid dark field images folder in config file '+
-                        f'({self.tdf_data_folder})')
-                is_valid = False
-        logging.info(f'tdf_data_folder = {self.tdf_data_folder}')
+            if self.data_filetype == 'h5':
+                if isinstance(self.tdf_data_path, str):
+                    if not os.path.isabs(self.tdf_data_path):
+                        self.tdf_data_path = os.path.abspath(f'{work_folder}/{self.tdf_data_path}')
+                else:
+                    msnc.illegal_value('tdf_data_path', self.tdf_data_fil, 'config file')
+                    is_valid = False
+            else:
+                if isinstance(self.tdf_data_path, int):
+                    self.tdf_data_path = os.path.abspath(f'{work_folder}/{self.tdf_data_path}/nf')
+                elif isinstance(self.tdf_data_path, str):
+                    if not os.path.isabs(self.tdf_data_path):
+                        self.tdf_data_path = os.path.abspath(f'{work_folder}/{self.tdf_data_path}')
+                else:
+                    msnc.illegal_value('tdf_data_path', self.tdf_data_path, 'config file')
+                    is_valid = False
  
-        # Find tomography bright field images folder
-        self.tbf_data_folder = self.config.get('tbf_data_folder')
-        if self.tbf_data_folder == None:
-            pars_missing.append('tbf_data_folder')
+        # Find tomography bright field images file/folder
+        self.tbf_data_path = self.config.get('tbf_data_path')
+        if self.tbf_data_path == None:
+            pars_missing.append('tbf_data_path')
         else:
-            if isinstance(self.tbf_data_folder, int):
-                self.tbf_data_folder = f'{self.tbf_data_folder}/nf/'
-            elif not (isinstance(self.tbf_data_folder, str) and len(self.tbf_data_folder)):
-                msnc.illegal_value('tbf_data_folder', self.tbf_data_folder, 'config file')
-                is_valid = False
-            self.tbf_data_folder = self.work_folder+self.tbf_data_folder
-            if len(self.tbf_data_folder) > 0 and self.tbf_data_folder[-1] != '/':
-                self.tbf_data_folder += '/'
-            if not os.path.isdir(self.tbf_data_folder):
-                logging.error('Invalid bright field images folder in config file '+
-                        f'({self.tbf_data_folder})')
-                is_valid = False
-        logging.info(f'tbf_data_folder = {self.tbf_data_folder}')
-        
-        # Find tomography images folders and stack parameters
-        tomo_data_folders = sorted({key:value for key,value in self.config.items()
-                if 'tomo_data_folder' in key}.items())
-        if len(tomo_data_folders) != self.num_tomo_data_sets:
-            logging.error(f'Incorrect number of tomography data folder names in config file')
+            if self.data_filetype == 'h5':
+                if isinstance(self.tbf_data_path, str):
+                    if not os.path.isabs(self.tbf_data_path):
+                        self.tbf_data_path = os.path.abspath(f'{work_folder}/{self.tbf_data_path}')
+                else:
+                    msnc.illegal_value('tbf_data_path', self.tbf_data_fil, 'config file')
+                    is_valid = False
+            else:
+                if isinstance(self.tbf_data_path, int):
+                    self.tbf_data_path = os.path.abspath(f'{work_folder}/{self.tbf_data_path}/nf')
+                elif isinstance(self.tbf_data_path, str):
+                    if not os.path.isabs(self.tbf_data_path):
+                        self.tbf_data_path = os.path.abspath(f'{work_folder}/{self.tbf_data_path}')
+                else:
+                    msnc.illegal_value('tbf_data_path', self.tbf_data_path, 'config file')
+                    is_valid = False
+ 
+        # Find tomography images file/folders and stack parameters
+        tomo_data_paths = sorted({key:value for key,value in self.config.items()
+            if 'tomo_data_path' in key}.items())
+        if len(tomo_data_paths) != self.num_tomo_data_sets:
+            logging.error(f'Incorrect number of tomography data path names in config file')
+            return False
+        self.tomo_data_paths = [tomo_data_paths[i][1] for i in
+                range(self.num_tomo_data_sets)]
+        self.tomo_data_indices = [msnc.get_trailing_int(tomo_data_paths[i][0])-1
+                if msnc.get_trailing_int(tomo_data_paths[i][0]) else None
+                for i in range(self.num_tomo_data_sets)]
+        if self.num_tomo_data_sets > 1 and None in self.tomo_data_indices:
+            logging.error('Illegal tomography data file/folder name indices in config file')
             return False
         tomo_ref_heights = sorted({key:value for key,value in self.config.items()
                 if 'z_pos' in key}.items())
         if self.num_tomo_data_sets > 1 and len(tomo_ref_heights) != self.num_tomo_data_sets:
             logging.error(f'Incorrect number of tomography reference heights in config file')
             return False
-        self.tomo_data_indices = [msnc.get_trailing_int(tomo_data_folders[i][0])-1
-                if msnc.get_trailing_int(tomo_data_folders[i][0]) else None
-                for i in range(self.num_tomo_data_sets)]
         if len(tomo_ref_heights):
+            self.tomo_ref_heights = [tomo_ref_heights[i][1] for i in range(self.num_tomo_data_sets)]
             ref_height_indices = [msnc.get_trailing_int(tomo_ref_heights[i][0])-1
                     if msnc.get_trailing_int(tomo_ref_heights[i][0]) else None
                     for i in range(self.num_tomo_data_sets)]
         else:
             ref_height_indices = [None]*self.num_tomo_data_sets
-        if self.tomo_data_indices != ref_height_indices:
-            logging.error(f'Incompatible tomography data folder name indices '+
-                    'and reference heights indices in config file')
-            return False
-        if self.num_tomo_data_sets > 1 and None in self.tomo_data_indices:
-            logging.error('Illegal tomography data folder name indices in config file')
-            return False
-        self.tomo_data_folders = [tomo_data_folders[i][1] for i in range(self.num_tomo_data_sets)]
-        if len(tomo_ref_heights):
-            self.tomo_ref_heights = [tomo_ref_heights[i][1] for i in range(self.num_tomo_data_sets)]
+        if len(ref_height_indices) > 1 or ref_height_indices[0] != None:
+            if self.tomo_data_indices != ref_height_indices:
+                logging.error(f'Incompatible tomography data path indices '+
+                        'and reference heights indices in config file')
+                return False
         for i in range(self.num_tomo_data_sets):
-            if isinstance(self.tomo_data_folders[i], int):
-                self.tomo_data_folders[i] = f'{self.tomo_data_folders[i]}/nf/'
-            elif not (isinstance(self.tomo_data_folders[i], str) and
-                    len(self.tomo_data_folders[i])):
-                msnc.illegal_value('tomo_data_folders[i]', self.tomo_data_folders[i], 'config file')
-                return False
-            self.tomo_data_folders[i] = self.work_folder+self.tomo_data_folders[i]
-            if len(self.tomo_data_folders[i]) > 0 and self.tomo_data_folders[i][-1] != '/':
-                self.tomo_data_folders[i] += '/'
-            if not os.path.isdir(self.tomo_data_folders[i]):
-                logging.error('Invalid tomography images folder in config file '+
-                        f'({self.tomo_data_folders[i]})')
-                return False
+            if self.data_filetype == 'h5':
+                if isinstance(self.tomo_data_paths[i], str):
+                    if not os.path.isabs(self.tomo_data_paths[i]):
+                        self.tomo_data_paths[i] = os.path.abspath(f'{work_folder}/'+
+                                f'{self.tomo_data_paths[i]}')
+                else:
+                    msnc.illegal_value(f'tomo_data_paths[{i+1}]', self.tomo_data_paths[i],
+                            'config file')
+            else:
+                if isinstance(self.tomo_data_paths[i], int):
+                    self.tomo_data_paths[i] = os.path.abspath(f'{work_folder}/'+
+                            f'{self.tomo_data_paths[i]}/nf')
+                elif isinstance(self.tomo_data_paths[i], str):
+                    if not os.path.isabs(self.tomo_data_paths[i]):
+                        self.tomo_data_paths[i] = os.path.abspath(f'{work_folder}/'+
+                                f'{self.tomo_data_paths[i]}')
+                else:
+                    msnc.illegal_value(f'tomo_data_paths[{i+1}]', self.tomo_data_paths[i],
+                            'config file')
+                    return False
             if len(self.tomo_ref_heights) and not msnc.is_num(self.tomo_ref_heights[i]):
                 logging.error('Illegal tomography reference height in config file'+
                         f'{self.tomo_ref_heights[i]} {type(self.tomo_ref_heights[i])}')
@@ -425,10 +440,12 @@ class Tomo:
             self.tomo_ref_heights[0] = 0.
         else:
             self.tomo_ref_heights = [0.]
-        logging.info('tomography data folders:')
+        logging.info(f'dark field images path = {self.tdf_data_path}')
+        logging.info(f'bright field images path = {self.tbf_data_path}')
+        logging.info('tomography data paths:')
         for i in range(self.num_tomo_data_sets):
-            logging.info(f'    {self.tomo_data_folders[i]}')
-        logging.info(f'tomography data folder indices: {self.tomo_data_indices}')
+            logging.info(f'    {self.tomo_data_paths[i]}')
+        logging.info(f'tomography data path indices: {self.tomo_data_indices}')
         logging.info(f'tomography reference heights: {self.tomo_ref_heights}')
 
         # Update config file
@@ -477,11 +494,11 @@ class Tomo:
                             f'{self.tdf_num_imgs}, use this value ([y]/n)? ',
                             blank=True)
         if use_input == 'no':
-            self.tdf_img_start, tdf_img_offset, self.tdf_num_imgs = msnc.selectFiles(
-                    self.tdf_data_folder, 'dark field')
+            self.tdf_img_start, tdf_img_offset, self.tdf_num_imgs = \
+                    msnc.selectImageRange(self.tdf_data_path, self.data_filetype, 'dark field')
             if not self.tdf_img_start or not self.tdf_num_imgs:
                 logging.error('Unable to find suitable dark field images')
-                is_valid = False
+                #RV TODO FIX is_valid = False
         logging.debug(f'tdf_img_start = {self.tdf_img_start}')
         logging.debug(f'tdf_img_offset = {tdf_img_offset}')
         logging.debug(f'tdf_num_imgs = {self.tdf_num_imgs}')
@@ -509,8 +526,8 @@ class Tomo:
                             f'{self.tbf_num_imgs}, use this value ([y]/n)? ',
                             blank=True)
         if use_input == 'no':
-            self.tbf_img_start, tbf_img_offset, self.tbf_num_imgs = msnc.selectFiles(
-                    self.tbf_data_folder, 'bright field')
+            self.tbf_img_start, tbf_img_offset, self.tbf_num_imgs = \
+                    msnc.selectImageRange(self.tbf_data_path, self.data_filetype, 'bright field')
             if not self.tbf_img_start or not self.tbf_num_imgs:
                 logging.error('Unable to find suitable bright field images')
                 is_valid = False
@@ -550,8 +567,9 @@ class Tomo:
                 name = 'tomography'
                 if self.tomo_data_indices[i] != None:
                     name += f' set {1+self.tomo_data_indices[i]}'
-                self.tomo_img_starts[i], tomo_img_offsets[i], tomo_num_imgs = msnc.selectFiles(
-                        self.tomo_data_folders[i], name, self.num_thetas)
+                self.tomo_img_starts[i], tomo_img_offsets[i], tomo_num_imgs = \
+                        msnc.selectImageRange(self.tomo_data_paths[i],
+                        self.data_filetype, name, self.num_thetas)
                 if not self.tomo_img_starts[i] or not tomo_num_imgs:
                     logging.error('Unable to find suitable tomography images')
                     is_valid = False
@@ -591,7 +609,9 @@ class Tomo:
 
     def _genDark(self):
         """Generate dark field."""
-        if not self.tdf_data_folder:
+        if not self.tdf_data_path:
+            logging.error('Invalid dark field image path.')
+            return
             raise ValueError('Invalid dark field image path.')
         if not self.tdf_num_imgs:
             raise ValueError('Invalid number of dark field images.')
@@ -603,7 +623,7 @@ class Tomo:
         # Load a stack of dark field images
         t0 = time()
         logging.debug('Loading data to get median dark field...')
-        tdf_stack = msnc.loadImageStack(self.tdf_data_folder, self.tdf_img_start,
+        tdf_stack = msnc.loadImageStack(self.tdf_data_path, self.data_filetype, self.tdf_img_start,
                 self.tdf_num_imgs, 0, self.img_x_bounds, self.img_y_bounds)
 
         # Take median
@@ -624,7 +644,7 @@ class Tomo:
 
     def _genBright(self):
         """Generate bright field."""
-        if not self.tbf_data_folder:
+        if not self.tbf_data_path:
             raise ValueError('Invalid bright field image path')
         if not self.tbf_num_imgs:
             raise ValueError('Invalid number of bright field images')
@@ -635,7 +655,7 @@ class Tomo:
 
         # Load a stack of bright field images
         logging.debug('Loading data to get median bright field...')
-        tbf_stack = msnc.loadImageStack(self.tbf_data_folder, self.tbf_img_start,
+        tbf_stack = msnc.loadImageStack(self.tbf_data_path, self.data_filetype, self.tbf_img_start,
                 self.tbf_num_imgs, 0, self.img_x_bounds, self.img_y_bounds)
 
         # Take median
@@ -652,9 +672,11 @@ class Tomo:
         del tbf_stack
 
         # Subtract dark field
+        #RV TODO FIX
         if not self.tdf.size:
-            raise ValueError('Dark field unavailable')
-        self.tbf -= self.tdf
+            logging.error('Invalid dark field image path.')
+            #raise ValueError('Dark field unavailable')
+        #self.tbf -= self.tdf
         if not self.test_mode:
             msnc.quickImshow(self.tbf, title='bright field', path=self.output_folder,
                     save_fig=self.save_plots, save_only=self.save_plots_only)
@@ -665,6 +687,7 @@ class Tomo:
         if self.test_mode:
             self.img_x_bounds = img_x_bounds
             return
+
         # Check reference heights
         if self.pixel_size == None:
             raise ValueError('pixel_size unavailable')
@@ -681,52 +704,104 @@ class Tomo:
             if num_x_min > self.tbf.shape[0]:
                 logging.warning('Image bounds and pixel size prevent seamless stacking')
                 num_x_min = self.tbf.shape[0]
-        print('\nSelect image bounds from bright field')
-        msnc.quickImshow(self.tbf, title='bright field')
-        tbf_x_sum = np.sum(self.tbf, 1)
-        use_bounds = 'no'
-        if img_x_bounds[0] != None and img_x_bounds[1] != None:
-            if img_x_bounds[0] < 0:
-                msnc.illegal_value('img_x_bounds[0]', img_x_bounds[0], 'config file')
-                img_x_bounds[0] = 0
-            if not img_x_bounds[0] < img_x_bounds[1] <= tbf_x_sum.size:
-                msnc.illegal_value('img_x_bounds[1]', img_x_bounds[1], 'config file')
-                img_x_bounds[1] = tbf_x_sum.size
-            msnc.quickPlot((range(tbf_x_sum.size), tbf_x_sum),
-                    ([img_x_bounds[0], img_x_bounds[0]], [tbf_x_sum.min(), tbf_x_sum.max()], 'r-'),
-                    ([img_x_bounds[1], img_x_bounds[1]], [tbf_x_sum.min(), tbf_x_sum.max()], 'r-'),
-                    title='sum over theta and y')
-            print(f'lower bound = {img_x_bounds[0]} (inclusive)\n'+
-                    f'upper bound = {img_x_bounds[1]} (exclusive)]')
-            use_bounds =  pyip.inputYesNo('Accept these bounds ([y]/n)?: ', blank=True)
-        if use_bounds == 'no':
-            fit = msnc.fitStep(y=tbf_x_sum, model='rectangle', form='atan')
-            x_low = fit.get('center1', None)
-            x_upp = fit.get('center2', None)
-            if x_low != None and x_low >= 0 and x_upp != None and x_low < x_upp < tbf_x_sum.size:
-                x_low = int(x_low-(x_upp-x_low)/10)
-                if x_low < 0:
-                    x_low = 0
-                x_upp = int(x_upp+(x_upp-x_low)/10)
-                if x_upp >= tbf_x_sum.size:
-                    x_upp = tbf_x_sum.size
-                msnc.quickPlot((range(tbf_x_sum.size), tbf_x_sum),
-                        ([x_low, x_low], [tbf_x_sum.min(), tbf_x_sum.max()], 'r-'),
-                        ([x_upp, x_upp], [tbf_x_sum.min(), tbf_x_sum.max()], 'r-'),
+
+        # Select image bounds
+        # For one tomography set only: load the first image
+        if self.num_tomo_data_sets == 1:
+            tomo_stack = msnc.loadImageStack(self.tomo_data_paths[0], self.data_filetype,
+                    self.tomo_img_starts[0], 1)
+            msnc.quickImshow(self.tbf, title='bright field')
+            msnc.quickImshow(tomo_stack[0,:,:], title='tomography image at theta = '+
+                    f'{self.start_theta}')
+            tomo_or_bright = pyip.inputNum('\nSelect image bounds from bright field (0) or '+
+                    'from first tomography image (1): ', min=0, max=1)
+        else:
+            print('\nSelect image bounds from bright field')
+            msnc.quickImshow(self.tbf, title='bright field')
+            tomo_or_bright = 0
+        if tomo_or_bright:
+            x_sum = np.sum(tomo_stack[0,:,:], 1)
+            use_bounds = 'no'
+            if img_x_bounds[0] != None and img_x_bounds[1] != None:
+                if img_x_bounds[0] < 0:
+                    msnc.illegal_value('img_x_bounds[0]', img_x_bounds[0], 'config file')
+                    img_x_bounds[0] = 0
+                if not img_x_bounds[0] < img_x_bounds[1] <= x_sum.size:
+                    msnc.illegal_value('img_x_bounds[1]', img_x_bounds[1], 'config file')
+                    img_x_bounds[1] = x_sum.size
+                tomo_tmp = tomo_stack[0,:,:]
+                tomo_tmp[img_x_bounds[0],:] = tomo_stack[0,:,:].max()
+                tomo_tmp[img_x_bounds[1],:] = tomo_stack[0,:,:].max()
+                msnc.quickImshow(tomo_stack[0,:,:], title='tomography image at theta = '+
+                        f'{self.start_theta}')
+                msnc.quickPlot((range(x_sum.size), x_sum),
+                        ([img_x_bounds[0], img_x_bounds[0]], [x_sum.min(), x_sum.max()], 'r-'),
+                        ([img_x_bounds[1], img_x_bounds[1]], [x_sum.min(), x_sum.max()], 'r-'),
                         title='sum over theta and y')
-                print(f'lower bound = {x_low} (inclusive)\nupper bound = {x_upp} (exclusive)]')
-                use_fit =  pyip.inputYesNo('Accept these bounds ([y]/n)?: ', blank=True)
-            if use_fit == 'no':
-                img_x_bounds = msnc.selectArrayBounds(tbf_x_sum, img_x_bounds[0], img_x_bounds[1],
-                        num_x_min, 'sum over theta and y')
-            else:
-                img_x_bounds = [x_low, x_upp]
-            if num_x_min != None and img_x_bounds[1]-img_x_bounds[0]+1 < num_x_min:
-                logging.warning('Image bounds and pixel size prevent seamless stacking')
-            msnc.quickPlot(range(img_x_bounds[0], img_x_bounds[1]),
-                    tbf_x_sum[img_x_bounds[0]:img_x_bounds[1]],
-                    title='sum over theta and y', path=self.output_folder,
-                    save_fig=self.save_plots, save_only=True)
+                print(f'lower bound = {img_x_bounds[0]} (inclusive)\n'+
+                        f'upper bound = {img_x_bounds[1]} (exclusive)]')
+                use_bounds =  pyip.inputYesNo('Accept these bounds ([y]/n)?: ', blank=True)
+            if use_bounds == 'no':
+                img_x_bounds = msnc.selectImageBounds(tomo_stack[0,:,:], 0,
+                        img_x_bounds[0], img_x_bounds[1], num_x_min,
+                        f'tomography image at theta = {self.start_theta}')
+                if num_x_min != None and img_x_bounds[1]-img_x_bounds[0]+1 < num_x_min:
+                    logging.warning('Image bounds and pixel size prevent seamless stacking')
+                tomo_tmp = tomo_stack[0,:,:]
+                tomo_tmp[img_x_bounds[0],:] = tomo_stack[0,:,:].max()
+                tomo_tmp[img_x_bounds[1],:] = tomo_stack[0,:,:].max()
+                msnc.quickImshow(tomo_stack[0,:,:], title='tomography image at theta = '+
+                        f'{self.start_theta}', path=self.output_folder,
+                        save_fig=self.save_plots, save_only=True)
+                msnc.quickPlot(range(img_x_bounds[0], img_x_bounds[1]),
+                        x_sum[img_x_bounds[0]:img_x_bounds[1]],
+                        title='sum over theta and y', path=self.output_folder,
+                        save_fig=self.save_plots, save_only=True)
+        else:
+            x_sum = np.sum(self.tbf, 1)
+            use_bounds = 'no'
+            if img_x_bounds[0] != None and img_x_bounds[1] != None:
+                if img_x_bounds[0] < 0:
+                    msnc.illegal_value('img_x_bounds[0]', img_x_bounds[0], 'config file')
+                    img_x_bounds[0] = 0
+                if not img_x_bounds[0] < img_x_bounds[1] <= x_sum.size:
+                    msnc.illegal_value('img_x_bounds[1]', img_x_bounds[1], 'config file')
+                    img_x_bounds[1] = x_sum.size
+                msnc.quickPlot((range(x_sum.size), x_sum),
+                        ([img_x_bounds[0], img_x_bounds[0]], [x_sum.min(), x_sum.max()], 'r-'),
+                        ([img_x_bounds[1], img_x_bounds[1]], [x_sum.min(), x_sum.max()], 'r-'),
+                        title='sum over theta and y')
+                print(f'lower bound = {img_x_bounds[0]} (inclusive)\n'+
+                        f'upper bound = {img_x_bounds[1]} (exclusive)]')
+                use_bounds =  pyip.inputYesNo('Accept these bounds ([y]/n)?: ', blank=True)
+            if use_bounds == 'no':
+                fit = msnc.fitStep(y=x_sum, model='rectangle', form='atan')
+                x_low = fit.get('center1', None)
+                x_upp = fit.get('center2', None)
+                if x_low != None and x_low >= 0 and x_upp != None and x_low < x_upp < x_sum.size:
+                    x_low = int(x_low-(x_upp-x_low)/10)
+                    if x_low < 0:
+                        x_low = 0
+                    x_upp = int(x_upp+(x_upp-x_low)/10)
+                    if x_upp >= x_sum.size:
+                        x_upp = x_sum.size
+                    msnc.quickPlot((range(x_sum.size), x_sum),
+                            ([x_low, x_low], [x_sum.min(), x_sum.max()], 'r-'),
+                            ([x_upp, x_upp], [x_sum.min(), x_sum.max()], 'r-'),
+                            title='sum over theta and y')
+                    print(f'lower bound = {x_low} (inclusive)\nupper bound = {x_upp} (exclusive)]')
+                    use_fit =  pyip.inputYesNo('Accept these bounds ([y]/n)?: ', blank=True)
+                if use_fit == 'no':
+                    img_x_bounds = msnc.selectArrayBounds(x_sum, img_x_bounds[0], img_x_bounds[1],
+                            num_x_min, 'sum over theta and y')
+                else:
+                    img_x_bounds = [x_low, x_upp]
+                if num_x_min != None and img_x_bounds[1]-img_x_bounds[0]+1 < num_x_min:
+                    logging.warning('Image bounds and pixel size prevent seamless stacking')
+                msnc.quickPlot(range(img_x_bounds[0], img_x_bounds[1]),
+                        x_sum[img_x_bounds[0]:img_x_bounds[1]],
+                        title='sum over theta and y', path=self.output_folder,
+                        save_fig=self.save_plots, save_only=True)
         self.img_x_bounds = img_x_bounds
         logging.debug(f'img_x_bounds: {self.img_x_bounds}')
         logging.debug(f'img_y_bounds: {self.img_y_bounds}')
@@ -826,7 +901,7 @@ class Tomo:
     def _genTomo(self, available_sets):
         """Generate tomography fields."""
         if len(available_sets) != self.num_tomo_data_sets:
-            logging.warning('Illegal dimension of available_sets in _getImageFiles '+
+            logging.warning('Illegal dimension of available_sets in _genTomo'+
                     f'({len(available_sets)}');
             available_sets = [False]*self.num_tomo_data_sets
         if not self.img_x_bounds or not self.img_y_bounds:
@@ -838,9 +913,10 @@ class Tomo:
         if num_theta_skip == None:
             num_theta_skip = 0
         if not self.tdf.size:
-            raise ValueError('Dark field unavailable')
-        tdf = self.tdf[self.img_x_bounds[0]:self.img_x_bounds[1],
-                self.img_y_bounds[0]:self.img_y_bounds[1]]
+            logging.error('Dark field unavailable')
+            #RV TODO FIX raise ValueError('Dark field unavailable')
+        #tdf = self.tdf[self.img_x_bounds[0]:self.img_x_bounds[1],
+        #        self.img_y_bounds[0]:self.img_y_bounds[1]]
         if not self.tbf.size:
             raise ValueError('Bright field unavailable')
         tbf = self.tbf[self.img_x_bounds[0]:self.img_x_bounds[1],
@@ -852,17 +928,17 @@ class Tomo:
 
             # Load a stack of tomography images
             t0 = time()
-            tomo_stack = msnc.loadImageStack(self.tomo_data_folders[i],
+            tomo_stack = msnc.loadImageStack(self.tomo_data_paths[i], self.data_filetype,
                     self.tomo_img_starts[i], self.num_thetas, num_theta_skip,
                     self.img_x_bounds, self.img_y_bounds)
             tomo_stack = tomo_stack.astype('float64')
             logging.debug(f'loading took {time()-t0:.2f} seconds!')
 
             # Subtract dark field
-            t0 = time()
-            with set_numexpr_threads(self.ncore):
-                ne.evaluate('tomo_stack-tdf', out=tomo_stack)
-            logging.debug(f'subtracting dark field took {time()-t0:.2f} seconds!')
+            #RV TODO FIX t0 = time()
+            #with set_numexpr_threads(self.ncore):
+            #    ne.evaluate('tomo_stack-tdf', out=tomo_stack)
+            #logging.debug(f'subtracting dark field took {time()-t0:.2f} seconds!')
 
             # Normalize
             t0 = time()
@@ -877,7 +953,8 @@ class Tomo:
                 ne.evaluate('where(tomo_stack<cutoff, cutoff, tomo_stack)', out=tomo_stack)
             with set_numexpr_threads(self.ncore):
                 ne.evaluate('-log(tomo_stack)', out=tomo_stack)
-            logging.debug(f'removing non-positive values and linearizing data took {time()-t0:.2f} seconds!')
+            logging.debug('removing non-positive values and linearizing data took '+
+                    f'{time()-t0:.2f} seconds!')
 
             # Get rid of nans/infs that may be introduced by normalization
             t0 = time()
@@ -925,7 +1002,7 @@ class Tomo:
             self.tomo_sets[i] = tomo_stack
             logging.debug(f'combining stack took {time()-t0:.2f} seconds!')
 
-        del tdf
+        #RV TODO FIX del tdf
         del tbf
 
     def _reconstructOnePlane(self, tomo_plane_T, center, plot_sinogram=True):
@@ -1621,7 +1698,8 @@ class Tomo:
         # Save combined reconstructed tomo sets
         base_name = 'recon combined'
         for i in range(self.num_tomo_data_sets):
-            base_name += f' {1+self.tomo_data_indices[i]}'
+            if self.tomo_data_indices[i] != None:
+                base_name += f' {1+self.tomo_data_indices[i]}'
         self._saveTomo(base_name, tomo_recon_combined)
 
         # Update config file
@@ -1632,7 +1710,7 @@ class Tomo:
         self.config = msnc.updateConfigFile('config.txt', 'combine_sets', True,
                 'reconstruct_sets')
 
-def runTomo(config_file=None, config_dict=None, output_folder='./', log_level='INFO',
+def runTomo(config_file=None, config_dict=None, output_folder='.', log_level='INFO',
         test_mode=False):
     """Run a tomography analysis"""
     tomo = Tomo(config_file=config_file, output_folder=output_folder, log_level=log_level,
@@ -1672,7 +1750,7 @@ def runTomo(config_file=None, config_dict=None, output_folder='./', log_level='I
 if __name__ == '__main__':
     arguments = sys.argv[1:]
     config_file = 'config.txt'
-    output_folder = './'
+    output_folder = '.'
     log_level = 'INFO'
     test_mode = False
     try:
