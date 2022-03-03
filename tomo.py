@@ -173,8 +173,7 @@ class Tomo:
         is_valid = True
 
         # Check for required first-level keys
-        #RV TODO FIX pars_needed = ['tdf_data_path', 'tbf_data_path', 'detector_id']
-        pars_needed = ['tbf_data_path', 'detector_id']
+        pars_needed = ['tdf_data_path', 'tbf_data_path', 'detector_id']
         pars_missing.extend([p for p in pars_needed if p not in self.config])
         if len(pars_missing) > 0:
             is_valid = False
@@ -336,7 +335,7 @@ class Tomo:
         self.tdf_data_path = self.config.get('tdf_data_path')
         if self.tdf_data_path == None:
             pass
-            #pars_missing.append('tdf_data_path')
+            #RV FIX pars_missing.append('tdf_data_path')
         else:
             if self.data_filetype == 'h5':
                 if isinstance(self.tdf_data_path, str):
@@ -498,7 +497,8 @@ class Tomo:
                     msnc.selectImageRange(self.tdf_data_path, self.data_filetype, 'dark field')
             if not self.tdf_img_start or not self.tdf_num_imgs:
                 logging.error('Unable to find suitable dark field images')
-                #RV TODO FIX is_valid = False
+                if self.tdf_data_path != None:
+                    is_valid = False
         logging.debug(f'tdf_img_start = {self.tdf_img_start}')
         logging.debug(f'tdf_img_offset = {tdf_img_offset}')
         logging.debug(f'tdf_num_imgs = {self.tdf_num_imgs}')
@@ -672,11 +672,11 @@ class Tomo:
         del tbf_stack
 
         # Subtract dark field
-        #RV TODO FIX
-        if not self.tdf.size:
+        if self.tdf.size:
+            self.tbf -= self.tdf
+        else:
             logging.error('Invalid dark field image path.')
-            #raise ValueError('Dark field unavailable')
-        #self.tbf -= self.tdf
+            #RV FIX raise ValueError('Dark field unavailable')
         if not self.test_mode:
             msnc.quickImshow(self.tbf, title='bright field', path=self.output_folder,
                     save_fig=self.save_plots, save_only=self.save_plots_only)
@@ -719,6 +719,7 @@ class Tomo:
             print('\nSelect image bounds from bright field')
             msnc.quickImshow(self.tbf, title='bright field')
             tomo_or_bright = 0
+        msnc.clearFig('bright field')
         if tomo_or_bright:
             x_sum = np.sum(tomo_stack[0,:,:], 1)
             use_bounds = 'no'
@@ -912,11 +913,12 @@ class Tomo:
         num_theta_skip = self.config.get('num_theta_skip')
         if num_theta_skip == None:
             num_theta_skip = 0
-        if not self.tdf.size:
+        if self.tdf.size:
+            tdf = self.tdf[self.img_x_bounds[0]:self.img_x_bounds[1],
+                    self.img_y_bounds[0]:self.img_y_bounds[1]]
+        else:
             logging.error('Dark field unavailable')
-            #RV TODO FIX raise ValueError('Dark field unavailable')
-        #tdf = self.tdf[self.img_x_bounds[0]:self.img_x_bounds[1],
-        #        self.img_y_bounds[0]:self.img_y_bounds[1]]
+            #RV FIX raise ValueError('Dark field unavailable')
         if not self.tbf.size:
             raise ValueError('Bright field unavailable')
         tbf = self.tbf[self.img_x_bounds[0]:self.img_x_bounds[1],
@@ -935,10 +937,11 @@ class Tomo:
             logging.debug(f'loading took {time()-t0:.2f} seconds!')
 
             # Subtract dark field
-            #RV TODO FIX t0 = time()
-            #with set_numexpr_threads(self.ncore):
-            #    ne.evaluate('tomo_stack-tdf', out=tomo_stack)
-            #logging.debug(f'subtracting dark field took {time()-t0:.2f} seconds!')
+            if self.tdf.size:
+                t0 = time()
+                with set_numexpr_threads(self.ncore):
+                    ne.evaluate('tomo_stack-tdf', out=tomo_stack)
+                logging.debug(f'subtracting dark field took {time()-t0:.2f} seconds!')
 
             # Normalize
             t0 = time()
@@ -1002,7 +1005,8 @@ class Tomo:
             self.tomo_sets[i] = tomo_stack
             logging.debug(f'combining stack took {time()-t0:.2f} seconds!')
 
-        #RV TODO FIX del tdf
+        if self.tdf.size:
+            del tdf
         del tbf
 
     def _reconstructOnePlane(self, tomo_plane_T, center, plot_sinogram=True):
@@ -1322,9 +1326,12 @@ class Tomo:
         use_row = False
         use_center = False
         if self.config.get('lower_row'):
+            msnc.quickImshow(center_stack[:,0,:], title=f'theta={self.start_theta}',
+                    aspect='auto')
             row = int(self.config['lower_row'])
             use_row = pyip.inputYesNo('\nCurrent row index for lower center = '
                     f'{row}, use this value (y/n)? ')
+            msnc.clearFig(f'theta={self.start_theta}')
             if use_row:
                 if self.config.get('lower_center_offset'):
                     center_offset = self.config['lower_center_offset']
@@ -1333,10 +1340,13 @@ class Tomo:
                                 f'{center_offset}, use this value (y/n)? ')
         if not use_center:
             if not use_row:
+                msnc.quickImshow(center_stack[:,0,:], title=f'theta={self.start_theta}',
+                        aspect='auto')
                 row = pyip.inputInt('\nEnter row index to find lower center '+
                         f'[[{n1}], {n2-2}]: ', min=n1, max=n2-2, blank=True)
                 if row == '':
                     row = n1
+                msnc.clearFig(f'theta={self.start_theta}')
             # center_stack order: row,theta,column
             center_offset = self._findCenterOnePlane(center_stack[row,:,:], row)
         lower_row = row
@@ -1356,9 +1366,12 @@ class Tomo:
         use_row = False
         use_center = False
         if self.config.get('upper_row'):
+            msnc.quickImshow(center_stack[:,0,:], title=f'theta={self.start_theta}',
+                    aspect='auto')
             row = int(self.config['upper_row'])
             use_row = pyip.inputYesNo('\nCurrent row index for upper center = '
                     f'{row}, use this value (y/n)? ')
+            msnc.clearFig(f'theta={self.start_theta}')
             if use_row:
                 if self.config.get('upper_center_offset'):
                     center_offset = int(self.config['upper_center_offset'])
@@ -1367,8 +1380,11 @@ class Tomo:
                                 f'{center_offset}, use this value (y/n)? ')
         if not use_center:
             if not use_row:
+                msnc.quickImshow(center_stack[:,0,:], title=f'theta={self.start_theta}',
+                        aspect='auto')
                 row = pyip.inputInt('\nEnter row index to find upper center '+
                         f'[{lower_row+1}, [{n2-1}]]: ', min=lower_row+1, max=n2-1, blank=True)
+                msnc.clearFig(f'theta={self.start_theta}')
                 if row == '':
                     row = n2-1
             # center_stack order: row,theta,column
@@ -1606,6 +1622,7 @@ class Tomo:
         if False and self.test_mode:
             np.savetxt(self.output_folder+'recon_stack_sum_yz.txt',
                     tomosum[x_bounds[0]:x_bounds[1]], fmt='%.6e')
+        msnc.clearFig('recon stack sum yz')
         tomosum = 0
         [tomosum := tomosum+np.sum(tomo_recon_stack, axis=(0,1)) for tomo_recon_stack in
                 self.tomo_recon_sets]
@@ -1633,6 +1650,7 @@ class Tomo:
         if False and self.test_mode:
             np.savetxt(self.output_folder+'recon_stack_sum_xz.txt',
                     tomosum[y_bounds[0]:y_bounds[1]], fmt='%.6e')
+        msnc.clearFig('recon stack sum xz')
 
         # Combine reconstructed tomography sets
         logging.info(f'Combining reconstructed sets ...')
@@ -1680,6 +1698,7 @@ class Tomo:
         if z_bounds[0] != 0 or z_bounds[1] != tomo_recon_combined.shape[0]:
             tomo_recon_combined = tomo_recon_combined[z_bounds[0]:z_bounds[1],:,:]
         logging.info(f'tomo_recon_combined.shape = {tomo_recon_combined.shape}')
+        msnc.clearFig('recon combined sum xy')
 
         # Plot center slices
         msnc.quickImshow(tomo_recon_combined[int(tomo_recon_combined.shape[0]/2),:,:],

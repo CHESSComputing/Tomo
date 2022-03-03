@@ -56,7 +56,7 @@ def is_index_range(v, v_min=0, v_max=None):
         return False
     return True
 
-def illegal_value(name, value, location=None):
+def illegal_value(name, value, location=None, exit_flag=False):
     if not isinstance(location, str):
         location = ''
     else:
@@ -65,6 +65,8 @@ def illegal_value(name, value, location=None):
         logging.error(f'Illegal value for {name} {location}({value}, {type(value)})')
     else:
         logging.error(f'Illegal value {location}({value}, {type(value)})')
+    if exit_flag:
+        exit(1)
 
 def get_trailing_int(string):
     indexRegex = re.compile(r'\d+$')
@@ -304,7 +306,7 @@ def loadImageStack(path, filetype, img_start, num_imgs, num_img_skip=0,
         t0 = time()
         img_read_stack = []
         for i in range(0, num_read):
-            f = f'{folder}nf_{img_range[i]:06d}.tif'
+            f = f'{path}/nf_{img_range[i]:06d}.tif'
             if not (i+1)%20:
                 logging.info(f'    loading {i+1}/{len(img_range)}: {f}')
             else:
@@ -344,6 +346,12 @@ def loadImageStack(path, filetype, img_start, num_imgs, num_img_skip=0,
         illegal_value('filetype', filetype, 'selectImageRange')
     return img_stack
 
+def clearFig(title):
+    if not isinstance(title, str):
+        illegal_value('title', title, 'clearFig')
+        return
+    plt.close(fig=re.sub(r"\s+", '_', title))
+
 def quickImshow(a, title=None, path='.', save_fig=False, save_only=False, clear=True, **kwargs):
     if title != None and not isinstance(title, str):
         illegal_value('title', title, 'quickImshow')
@@ -382,19 +390,19 @@ def quickImshow(a, title=None, path='.', save_fig=False, save_only=False, clear=
 
 def quickPlot(*args, title=None, path='.', save_fig=False, save_only=False, clear=True, **kwargs):
     if title != None and not isinstance(title, str):
-        illegal_value('title', title, 'quickImshow')
+        illegal_value('title', title, 'quickPlot')
         return
     if not isinstance(path, str):
-        illegal_value('path', path, 'quickImshow')
+        illegal_value('path', path, 'quickPlot')
         return
     if not isinstance(save_fig, bool):
-        illegal_value('save_fig', save_fig, 'quickImshow')
+        illegal_value('save_fig', save_fig, 'quickPlot')
         return
     if not isinstance(save_only, bool):
-        illegal_value('save_only', save_only, 'quickImshow')
+        illegal_value('save_only', save_only, 'quickPlot')
         return
     if not isinstance(clear, bool):
-        illegal_value('clear', clear, 'quickImshow')
+        illegal_value('clear', clear, 'quickPlot')
         return
     if not title:
         title = 'quick_plot'

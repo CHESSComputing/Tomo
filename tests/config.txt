@@ -5,16 +5,16 @@
 work_folder = '/nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1'
 
 # Locations of tomography dark field images
-tdf_data_folder = 369
+tdf_data_path = 369
 
 # Locations of tomography bright field images
-tbf_data_folder = 370
+tbf_data_path = 370
 
 # Locations of tomography images
 num_tomo_data_sets = 3
-tomo_data_folder_1 = 371
-tomo_data_folder_2 = 376
-tomo_data_folder_3 = 381
+tomo_data_path_1 = 371
+tomo_data_path_2 = 376
+tomo_data_path_3 = 381
 
 # Detector ID
 detector_id = 'retiga'
