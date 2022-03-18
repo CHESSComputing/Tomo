@@ -4,3 +4,4 @@ detector:
     rows: 3008
     columns: 4112
     size: [0.00345, 0.00345]
+lens_magnification: 5

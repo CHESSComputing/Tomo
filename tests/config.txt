@@ -11,7 +11,7 @@ tdf_data_path = 369
 tbf_data_path = 370
 
 # Locations of tomography images
-num_tomo_data_sets = 3
+num_tomo_stacks = 3
 tomo_data_path_1 = 371
 tomo_data_path_2 = 376
 tomo_data_path_3 = 381
@@ -21,7 +21,6 @@ detector_id = 'retiga'
 
 # Scan parameters
 num_thetas = 1800
-lens_magnification = 5
 z_pos_1 = -2.603
 z_pos_2 = -1.603
 z_pos_3 = -0.603

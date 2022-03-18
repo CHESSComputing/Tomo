@@ -11,3 +11,5 @@ dependencies:
   - pip:
     - pyinputplus==0.2.12
     - h5py==3.6.0
+  - jupyter==1.0.0 # Not strictly necessary, just provided for users' convenience.
+  - spyder==5.2.2  # Not strictly necessary, just provided for users' convenience.

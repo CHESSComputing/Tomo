@@ -1,4 +1,4 @@
-name: tomopy-spyder
+name: tomopy
 channels:
   - astra-toolbox
   - conda-forge
@@ -8,7 +8,8 @@ dependencies:
   - pip==21.3.1
   - python==3.9.5
   - tomopy==1.11.0
-  - spyder==5.2.2
   - pip:
     - pyinputplus==0.2.12
     - h5py==3.6.0
+  - jupyter==1.0.0 # Not strictly necessary, just provided for users' convenience.
+  - spyder==5.2.2  # Not strictly necessary, just provided for users' convenience.
