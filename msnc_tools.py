@@ -82,7 +82,7 @@ def get_trailing_int(string):
     else:
         return int(mo.group())
 
-def selectImageRange(path, filetype, name=None, num_required=None):
+def findImageFiles(path, filetype, name=None, select_range=False, num_required=None):
     if isinstance(name, str):
         name = f' {name} '
     else:
@@ -90,8 +90,8 @@ def selectImageRange(path, filetype, name=None, num_required=None):
     # Find available index range
     if filetype == 'tif':
         if not isinstance(path, str) and not os.path.isdir(path):
-            illegal_value('path', path, 'selectImageRange')
-            return (-1, -1, 0)
+            illegal_value('path', path, 'findImageRange')
+            return -1, 0, []
         indexRegex = re.compile(r'\d+')
         # At this point only tiffs
         files = sorted([f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and
@@ -99,89 +99,111 @@ def selectImageRange(path, filetype, name=None, num_required=None):
         num_imgs = len(files)
         if num_imgs < 1:
             logging.warning('No available'+name+'files')
-            return (-1, -1, 0)
+            return -1, 0, []
         first_index = indexRegex.search(files[0]).group()
         last_index = indexRegex.search(files[-1]).group()
         if first_index == None or last_index == None:
             logging.error('Unable to find correctly indexed'+name+'images')
-            return (-1, -1, 0)
+            return -1, 0, []
         first_index = int(first_index)
         last_index = int(last_index)
         if num_imgs != last_index-first_index+1:
-            logging.warning('Non-consecutive set of indices for'+name+'images')
+            logging.error('Non-consecutive set of indices for'+name+'images')
+            return -1, 0, []
+        paths = [os.path.join(path, f) for f in files]
     elif filetype == 'h5':
         if not isinstance(path, str) or not os.path.isfile(path):
-            illegal_value('path', path, 'selectImageRange')
-            return (-1, -1, 0)
+            illegal_value('path', path, 'findImageRange')
+            return -1, 0, []
         # At this point only h5 in alamo2 detector style
         first_index = 0
         with h5py.File(path, 'r') as f:
             num_imgs = f['entry/instrument/detector/data'].shape[0]
             last_index = num_imgs-1
+        paths = [path]
     else:
-        illegal_value('filetype', filetype, 'selectImageRange')
-        return (-1, -1, 0)
+        illegal_value('filetype', filetype, 'findImageRange')
+        return -1, 0, []
+    logging.debug('\nNumber of available'+name+f'images: {num_imgs}')
+    logging.debug('Index range of available'+name+f'images: [{first_index}, '+
+            f'{last_index}]')
+
+    return first_index, num_imgs, paths
+
+def selectImageRange(first_index, offset, num_imgs, name=None, num_required=None):
+    if isinstance(name, str):
+        name = f' {name} '
+    else:
+        name = ' '
+    # Check existing values
+    use_input = 'no'
+    if (is_int(first_index, 0) and is_int(offset, 0) and is_int(num_imgs, 1)):
+        if offset < 0:
+            use_input = pyip.inputYesNo('\nCurrent'+name+f'first index = {first_index}, '+
+                    'use this value ([y]/n)? ', blank=True)
+        else:
+            use_input = pyip.inputYesNo('\nCurrent'+name+'first index/offset = '+
+                    f'{first_index}/{offset}, use these values ([y]/n)? ',
+                    blank=True)
+        if use_input != 'no':
+            use_input = pyip.inputYesNo('Current number of'+name+'images = '+
+                    f'{num_imgs}, use this value ([y]/n)? ',
+                    blank=True)
+    if use_input == 'yes':
+        return first_index, offset, num_imgs
 
     # Check range against requirements
     if num_imgs < 1:
         logging.warning('No available'+name+'images')
-        return (-1, -1, 0)
+        return -1, -1, 0
     if num_required == None:
         if num_imgs == 1:
-            return (first_index, 0, 1)
+            return first_index, 0, 1
     else:
         if not is_int(num_required, 1):
             illegal_value('num_required', num_required, 'selectImageRange')
-            return (-1, -1, 0)
+            return -1, -1, 0
         if num_imgs < num_required:
             logging.error('Unable to find the required'+name+
                     f'images ({num_imgs} out of {num_required})')
-            return (-1, -1, 0)
+            return -1, -1, 0
 
     # Select index range
-    if num_required and last_index-first_index+1 < num_required:
-        logging.error('Unable to find the required'+name+
-                f'images ({last_index-first_index+1} out of {num_required})')
-        return (-1, -1, 0)
-    print('\nNumber of available'+name+f'images: {num_imgs}')
-    print('Index range of available'+name+f'images: [{first_index}, '+
-            f'{last_index}]')
     if num_required == None:
+        last_index = first_index+num_imgs
         use_all = f'Use all ([{first_index}, {last_index}])'
-        pick_offset = 'Pick a starting index offset and a number of images'
+        pick_offset = 'Pick a first index offset and a number of images'
         pick_bounds = 'Pick the first and last index'
         menuchoice = pyip.inputMenu([use_all, pick_offset, pick_bounds], numbered=True)
         if menuchoice == use_all:
-            return (first_index, 0, num_imgs)
+            offset = 0
         elif menuchoice == pick_offset:
-            offset = pyip.inputInt('Enter the starting index offset'+
-                    f' [0, {last_index-first_index}]: ', min=0,
-                    max=last_index-first_index)
+            offset = pyip.inputInt('Enter the first index offset'+
+                    f' [0, {last_index-first_index}]: ', min=0, max=last_index-first_index)
             first_index += offset
             if first_index == last_index:
-                return (first_index, offset, 1)
+                num_imgs = 1
             else:
-                return (first_index, offset, pyip.inputInt('Enter the number of images'+
-                        f' [1, {last_index-first_index+1}]: ', min=1,
-                        max=last_index-first_index+1))
+                num_imgs = pyip.inputInt(f'Enter the number of images [1, {num_imgs}]: ',
+                        min=1, max=num_imgs)
         else:
-            offset = -first_index+pyip.inputInt('Enter the starting index '+
-                    f'[{first_index}, {last_index}]: ', min=first_index, max=last_index)
+            offset = pyip.inputInt(f'Enter the first index [{first_index}, {last_index}]: ',
+                    min=first_index, max=last_index)-first_index
             first_index += offset
-            return (first_index, offset, pyip.inputInt('Enter the last index '+
-                    f'[{first_index}, {last_index}]: ', min=first_index,
-                    max=last_index)-first_index+1)
+            num_imgs = pyip.inputInt(f'Enter the last index [{first_index}, {last_index}]: ',
+                    min=first_index, max=last_index)-first_index+1
     else:
         use_all = f'Use ([{first_index}, {first_index+num_required-1}])'
-        pick_offset = 'Pick a starting index offset'
+        pick_offset = 'Pick the first index offset'
         menuchoice = pyip.inputMenu([use_all, pick_offset], numbered=True)
         offset = 0
         if menuchoice == pick_offset:
-            offset = pyip.inputInt('Enter the starting index offset'+
-                    f'[0, {last_index-first_index-num_required+1}]: ',
-                    min=0, max=last_index-first_index-num_required+1)
+            offset = pyip.inputInt('Enter the first index offset'+
+                    f'[0, {num_imgs-num_required}]: ', min=0, max=num_imgs-num_required)
             first_index += offset
-        return (first_index, offset, num_required)
+        num_imgs = num_required
+
+    return first_index, offset, num_imgs
 
 def loadImage(f, img_x_bounds=None, img_y_bounds=None):
     """Load a single image from file.
@@ -206,65 +228,58 @@ def loadImage(f, img_x_bounds=None, img_y_bounds=None):
             return None
     return img_read[img_x_bounds[0]:img_x_bounds[1],img_y_bounds[0]:img_y_bounds[1]]
 
-def loadImageStack(path, filetype, img_start, num_imgs, num_img_skip=0,
+def loadImageStack(files, filetype, img_offset, num_imgs, num_img_skip=0,
         img_x_bounds=None, img_y_bounds=None):
     """Load a set of images and return them as a stack.
     """
-    logging.debug(f'img_start = {img_start}')
+    logging.debug(f'img_offset = {img_offset}')
     logging.debug(f'num_imgs = {num_imgs}')
     logging.debug(f'num_img_skip = {num_img_skip}')
-    img_range = np.arange(img_start, img_start+num_imgs, num_img_skip+1)
-    num_read = len(img_range)
-    if num_read == 1:
-        logging.info(f'Reading {num_read} image ...')
-    else:
-        logging.info(f'Reading {num_read} images ...')
+    logging.debug(f'\nfiles:\n{files}\n')
     img_stack = np.array([])
     if filetype == 'tif':
-        if not isinstance(path, str) and not os.path.isdir(path):
-            illegal_value('path', path, 'loadImageStack')
-            return img_stack
-        t0 = time()
         img_read_stack = []
-        for i in range(0, num_read):
-            f = f'{path}/nf_{img_range[i]:06d}.tif'
-            if not (i+1)%20:
-                logging.info(f'    loading {i+1}/{len(img_range)}: {f}')
+        i = 1
+        t0 = time()
+        for f in files[img_offset:img_offset+num_imgs:num_img_skip+1]:
+            if not i%20:
+                logging.info(f'    loading {i}/{num_imgs}: {f}')
             else:
-                logging.debug(f'    loading {i+1}/{len(img_range)}: {f}')
+                logging.debug(f'    loading {i}/{num_imgs}: {f}')
             img_read = loadImage(f, img_x_bounds, img_y_bounds)
             img_read_stack.append(img_read)
+            i += num_img_skip+1
         img_stack = np.stack([img_read for img_read in img_read_stack])
         logging.info(f'... done in {time()-t0:.2f} seconds!')
         logging.debug(f'img_stack shape = {np.shape(img_stack)}')
         del img_read_stack, img_read
     elif filetype == 'h5':
-        if not isinstance(path, str) and not os.path.isfile(path):
-            illegal_value('path', path, 'loadImageStack')
+        if not isinstance(files[0], str) and not os.path.isfile(files[0]):
+            illegal_value('files[0]', files[0], 'loadImageStack')
             return img_stack
         t0 = time()
-        with h5py.File(path, 'r') as f:
+        with h5py.File(files[0], 'r') as f:
             shape = f['entry/instrument/detector/data'].shape
             if len(shape) != 3:
-                logging.error(f'inconsistent dimensions in {path}')
+                logging.error(f'inconsistent dimensions in {files[0]}')
             if not img_x_bounds:
                 img_x_bounds = [0, shape[1]]
             else:
                 if (not isinstance(img_x_bounds, list) or len(img_x_bounds) != 2 or 
                         not (0 <= img_x_bounds[0] < img_x_bounds[1] <= shape[1])):
-                    logging.error(f'inconsistent row dimension in {path}')
+                    logging.error(f'inconsistent row dimension in {files[0]}')
             if not img_y_bounds:
                 img_y_bounds = [0, shape[2]]
             else:
                 if (not isinstance(img_y_bounds, list) or len(img_y_bounds) != 2 or 
                         not (0 <= img_y_bounds[0] < img_y_bounds[1] <= shape[2])):
-                    logging.error(f'inconsistent column dimension in {path}')
+                    logging.error(f'inconsistent column dimension in {files[0]}')
             img_stack = f.get('entry/instrument/detector/data')[
-                    img_start:img_start+num_imgs:num_img_skip+1,
+                    img_offset:img_offset+num_imgs:num_img_skip+1,
                     img_x_bounds[0]:img_x_bounds[1],img_y_bounds[0]:img_y_bounds[1]]
         logging.info(f'... done in {time()-t0:.2f} seconds!')
     else:
-        illegal_value('filetype', filetype, 'selectImageRange')
+        illegal_value('filetype', filetype, 'findImageRange')
     return img_stack
 
 def clearFig(title):
@@ -273,11 +288,12 @@ def clearFig(title):
         return
     plt.close(fig=re.sub(r"\s+", '_', title))
 
-def quickImshow(a, title=None, path='.', save_fig=False, save_only=False, clear=True, **kwargs):
+def quickImshow(a, title=None, path=None, name=None, save_fig=False, save_only=False,
+            clear=True, **kwargs):
     if title != None and not isinstance(title, str):
         illegal_value('title', title, 'quickImshow')
         return
-    if not isinstance(path, str):
+    if path is not None and not isinstance(path, str):
         illegal_value('path', path, 'quickImshow')
         return
     if not isinstance(save_fig, bool):
@@ -293,12 +309,22 @@ def quickImshow(a, title=None, path='.', save_fig=False, save_only=False, clear=
         title='quick_imshow'
     else:
         title = re.sub(r"\s+", '_', title)
+    if name is None:
+        if path is None:
+            path = f'{title}.png'
+        else:
+            path = f'{path}/{title}.png'
+    else:
+        if path is None:
+            path = name
+        else:
+            path = f'{path}/{name}'
     if clear:
         plt.close(fig=title)
     if save_only:
         plt.figure(title)
         plt.imshow(a, **kwargs)
-        plt.savefig(f'{path}/{title}.png')
+        plt.savefig(path)
         plt.close(fig=title)
         #plt.imsave(f'{title}.png', a, **kwargs)
     else:
@@ -306,14 +332,15 @@ def quickImshow(a, title=None, path='.', save_fig=False, save_only=False, clear=
         plt.figure(title)
         plt.imshow(a, **kwargs)
         if save_fig:
-            plt.savefig(f'{path}/{title}.png')
+            plt.savefig(path)
         plt.pause(1)
 
-def quickPlot(*args, title=None, path='.', save_fig=False, save_only=False, clear=True, **kwargs):
+def quickPlot(*args, title=None, path=None, name=None, save_fig=False, save_only=False,
+        clear=True, **kwargs):
     if title != None and not isinstance(title, str):
         illegal_value('title', title, 'quickPlot')
         return
-    if not isinstance(path, str):
+    if path is not None and not isinstance(path, str):
         illegal_value('path', path, 'quickPlot')
         return
     if not isinstance(save_fig, bool):
@@ -329,6 +356,16 @@ def quickPlot(*args, title=None, path='.', save_fig=False, save_only=False, clea
         title = 'quick_plot'
     else:
         title = re.sub(r"\s+", '_', title)
+    if name is None:
+        if path is None:
+            path = f'{title}.png'
+        else:
+            path = f'{path}/{title}.png'
+    else:
+        if path is None:
+            path = name
+        else:
+            path = f'{path}/{name}'
     if clear:
         plt.close(fig=title)
     if save_only:
@@ -338,7 +375,7 @@ def quickPlot(*args, title=None, path='.', save_fig=False, save_only=False, clea
                plt.plot(*y, **kwargs)
         else:
             plt.plot(*args, **kwargs)
-        plt.savefig(f'{path}/{title}.png')
+        plt.savefig(path)
         plt.close(fig=title)
     else:
         plt.ion()
@@ -349,7 +386,7 @@ def quickPlot(*args, title=None, path='.', save_fig=False, save_only=False, clea
         else:
             plt.plot(*args, **kwargs)
         if save_fig:
-            plt.savefig(f'{path}/{title}.png')
+            plt.savefig(path)
         plt.pause(1)
 
 def selectArrayBounds(a, x_low=None, x_upp=None, num_x_min=None,
