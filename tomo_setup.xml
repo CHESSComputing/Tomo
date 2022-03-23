@@ -1,5 +1,5 @@
 <tool id="tomo_setup" name="Tomo Setup" version="0.1.0" python_template_version="3.9">
-    <description>Setup tomography images</description>
+    <description>Preprocess tomography images</description>
     <requirements>
         <requirement type="package" version="1.11.0">tomopy</requirement>
         <requirement type="package" version="0.2.12">pyinputplus</requirement>
@@ -53,7 +53,7 @@
         <data name="log" format="txt" label="Log"/>
     </outputs>
     <help><![CDATA[
-        Setup tomography images.
+        Preprocess tomography images.
     ]]></help>
     <citations>
         <citation type="bibtex">

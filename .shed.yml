@@ -1,0 +1,5 @@
+owner: rv43
+name: tomo_setup
+description: Preprocess tomography images
+remote_repository_url: https://gitlab01.classe.cornell.edu/msn-c/tomo.git
+categories: []
