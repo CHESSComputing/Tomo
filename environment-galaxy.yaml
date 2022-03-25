@@ -1,10 +1,13 @@
-name: tomopy
+name: tomopy-galaxy
 channels:
   - astra-toolbox
+  - bioconda
   - conda-forge
   - defaults
 dependencies:
   - astra-toolbox==2.0.0
+  - bioblend==0.16.0
+  - ephemeris==0.10.7
   - pip==21.3.1
   - python==3.9.5
   - tomopy==1.11.0

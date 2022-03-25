@@ -1,5 +1,6 @@
-owner: rv43
-name: tomo_setup
+categories:
+- Structural Materials Analysis
 description: Preprocess tomography images
-remote_repository_url: https://gitlab01.classe.cornell.edu/msn-c/tomo.git
-categories: []
+name: tomo_setup
+owner: ximgchess
+remote_repository_url: https://github.com/ximg-chess/galaxytools/tools/tomo
