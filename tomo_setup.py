@@ -52,20 +52,19 @@ def __main__():
     logging.basicConfig(format=logging_format, level=level, force=True,
             handlers=[logging.StreamHandler()])
 
-    logging.info(f'config = {args.config}\n')
-    logging.info(f'theta_range = {args.theta_range.split()}\n')
-    logging.info(f'dark = {args.dark}\n')
-    logging.info(f'bright = {args.bright}\n')
-    logging.info(f'tomo = {args.tomo}\n')
-    logging.info(f'detectorbounds = {args.detectorbounds}\n')
-    logging.info(f'output_config = {args.output_config}\n')
-    logging.info(f'output_data = {args.output_data}\n')
+    logging.info(f'config = {args.config}')
+    logging.info(f'theta_range = {args.theta_range.split()}')
+    logging.info(f'dark = {args.dark}')
+    logging.info(f'bright = {args.bright}')
+    logging.info(f'tomo = {args.tomo}')
+    logging.info(f'detectorbounds = {args.detectorbounds}')
+    logging.info(f'output_config = {args.output_config}')
+    logging.info(f'output_data = {args.output_data}')
     logging.info(f'log = {args.log}')
-    logging.info(f'is log stdout? {args.log == sys.stdout}')
-    logging.info(f'tomoranges = {args.tomo_ranges}\n\n')
+    logging.info(f'is log stdout? {args.log is sys.stdout}')
+    logging.info(f'tomoranges = {args.tomo_ranges}')
 
     # Read input files and collect data files info
-    logging.debug('data files:\n')
     datasets = []
     with open(args.inputfiles) as cf:
         for line in cf:
@@ -75,7 +74,7 @@ def __main__():
             filepath = fields[0]
             element_identifier = fields[1] if len(fields) > 1 else fields[0].split('/')[-1]
             datasets.append({'element_identifier' : fields[1], 'filepath' : filepath})
-    logging.debug(f'\ndatasets: {datasets}\n')
+    logging.debug(f'datasets:\n{datasets}')
 
     # Read and sort data files
     collections = []
@@ -95,7 +94,7 @@ def __main__():
             else:
                 collection = {'name' : name, 'filepaths' : [filepath]}
                 collections.append(collection)
-    logging.debug(f'\ncollections:\n{collections}\n\n')
+    logging.debug(f'collections:\n{collections}')
     if len(args.tomo_ranges) != 2*len(collections):
         raise ValueError('Inconsistent tomo ranges size.')
 
@@ -104,7 +103,7 @@ def __main__():
             log_stream=args.log, galaxy_flag=True)
     if not tomo.is_valid:
         raise ValueError('Invalid config file provided.')
-    logging.debug(f'config:\n{tomo.config}\n\n')
+    logging.debug(f'config:\n{tomo.config}')
 
     # Set theta inputs
     theta_range = args.theta_range.split()
@@ -116,7 +115,6 @@ def __main__():
         config_theta_range['start'] = float(theta_range[0])
         config_theta_range['end'] = float(theta_range[1])
         config_theta_range['num'] = int(theta_range[2])
-    tomo.cf.saveFile(args.output_config)
 
     # Find dark field files
     dark_field = tomo.config['dark_field']
@@ -152,7 +150,7 @@ def __main__():
         stack['num'] = args.tomo_ranges[2*num_collections+1]
         tomo_files = [c['filepaths'] for c in collections if c['name'] == f'set{stack["index"]}']
         if len(tomo_files) != 1 or len(tomo_files[0]) < 1:
-            exit(f'Unable to obtain tomography images for set {stack["index"]}\n')
+            exit(f'Unable to obtain tomography images for set {stack["index"]}')
         tomo_stack_files.append(tomo_files[0])
         num_collections += 1
 
@@ -161,8 +159,6 @@ def __main__():
         args.tomo, args.detectorbounds, args.output_data)
     if not tomo.is_valid:
         IOError('Unable to load all required image files.')
-
-#RV make start_theta, end_theta and num_theta inputs
 
 if __name__ == "__main__":
     __main__()

@@ -14,7 +14,10 @@ import sys
 import getopt
 import re
 import io
-import pyinputplus as pyip
+try:
+    import pyinputplus as pyip
+except:
+    pass
 import numpy as np
 import numexpr as ne
 import multiprocessing as mp
@@ -393,6 +396,32 @@ class Tomo:
         self.tomo_stacks = []
         self.tomo_recon_stacks = []
 
+        # Validate input parameters
+        if config_file is not None and not os.path.isfile(config_file):
+            raise OSError(f'Invalid config_file input {config_file} {type(config_file)}')
+        if config_dict is not None and not isinstance(config_dict, dict):
+            raise ValueError(f'Invalid config_dict input {config_dict} {type(config_dict)}')
+        if config_out is not None:
+            if isinstance(config_out, str):
+                if isinstance(log_stream, str):
+                    path = os.path.split(log_stream)[0]
+                    if path and not os.path.isdir(path):
+                        raise OSError(f'Invalid log_stream path')
+            else:
+                raise OSError(f'Invalid config_out input {config_out} {type(config_out)}')
+        if not os.path.isdir(output_folder):
+            raise OSError(f'Invalid output_folder input {output_folder} {type(output_folder)}')
+        if isinstance(log_stream, str):
+            path = os.path.split(log_stream)[0]
+            if path and not os.path.isdir(path):
+                raise OSError(f'Invalid log_stream path')
+            if not os.path.isabs(path):
+                log_stream = f'{output_folder}/{log_stream}'
+        if not isinstance(galaxy_flag, bool):
+            raise ValueError(f'Invalid galaxy_flag input {galaxy_flag} {type(galaxy_flag)}')
+        if not isinstance(test_mode, bool):
+            raise ValueError(f'Invalid test_mode input {test_mode} {type(test_mode)}')
+
         # Set log configuration
         logging_format = '%(asctime)s : %(levelname)s - %(module)s : %(funcName)s - %(message)s'
         if self.test_mode:
@@ -427,12 +456,12 @@ class Tomo:
                 stream_handler.setLevel(logging.WARNING)
                 stream_handler.setFormatter(logging.Formatter(logging_format))
 
-        # Set output config file name
+        # Check/set output config file name
         if self.config_out is None:
-            if self.config is None:
-                self.config_out = 'config.yaml'
-            else:
-                self.config_out = config_file
+            self.config_out = f'{self.output_folder}/config.yaml'
+        elif (self.config_out is os.path.basename(self.config_out) and
+                not os.path.isabs(self.config_out)):
+            self.config_out = f'{self.output_folder}/{self.config_out}'
 
         logging.info(f'ncore = {self.ncore}')
         logging.debug(f'config_file = {config_file}')
@@ -501,60 +530,8 @@ class Tomo:
         logging.debug(f'save_plots = {self.save_plots}')
         logging.debug(f'save_plots_only = {self.save_plots_only}')
 
-    def findImageFiles(self):
-        """Find all available image files.
-        """
-        self.is_valid = True
-
-        # Find dark field images
-        dark_field = self.config['dark_field']
-        img_start, num_imgs, dark_files = msnc.findImageFiles(
-                dark_field['data_path'], self.config['data_filetype'], 'dark field')
-        if img_start < 0 or num_imgs < 1:
-            logging.error('Unable to find suitable dark field images')
-            if dark_field['data_path']:
-                self.is_valid = False
-        dark_field['num'] = num_imgs
-        dark_field['img_start'] = img_start
-        logging.info(f'Number of dark field images = {dark_field["num"]}')
-        logging.info(f'Dark field image start index = {dark_field["img_start"]}')
-
-        # Find bright field images
-        bright_field = self.config['bright_field']
-        img_start, num_imgs, bright_files  = msnc.findImageFiles(
-                bright_field['data_path'], self.config['data_filetype'], 'bright field')
-        if img_start < 0 or num_imgs < 1:
-            logging.error('Unable to find suitable bright field images')
-            self.is_valid = False
-        bright_field['num'] = num_imgs
-        bright_field['img_start'] = img_start
-        logging.info(f'Number of bright field images = {bright_field["num"]}')
-        logging.info(f'Bright field image start index = {bright_field["img_start"]}')
-
-        # Find tomography images
-        tomo_stack_files = []
-        for stack in self.config['stack_info']['stacks']:
-            index = stack['index']
-            img_start, num_imgs, tomo_files = msnc.findImageFiles(
-                    stack['data_path'], self.config['data_filetype'], f'tomography set {index}')
-            if img_start < 0 or num_imgs < 1:
-                logging.error('Unable to find suitable tomography images')
-                self.is_valid = False
-            stack['num'] = num_imgs
-            stack['img_start'] = img_start
-            logging.info(f'Number of tomography images for set {index} = {stack["num"]}')
-            logging.info(f'Tomography set {index} image start index = {stack["img_start"]}')
-            tomo_stack_files.append(tomo_files)
-            del tomo_files
-
-        # Safe updated config
-        if self.is_valid:
-            self.cf.saveFile(self.config_out)
-
-        return dark_files, bright_files, tomo_stack_files
-
-    def selectImageRanges(self, available_stacks=None):
-        """Find and check all required image files.
+    def _selectImageRanges(self, available_stacks=None):
+        """Select image files to be included in analysis.
         """
         self.is_valid = True
         stack_info = self.config['stack_info']
@@ -622,7 +599,7 @@ class Tomo:
             index = stack['index']
             img_start = stack.get('img_start', -1)
             img_offset = stack.get('img_offset', -1)
-            num_imgs = num_thetas
+            num_imgs = stack.get('num', 0)
             if not self.test_mode:
                 img_start, img_offset, num_imgs = msnc.selectImageRange(img_start, img_offset,
                         num_imgs, f'tomography stack {index}', num_thetas)
@@ -709,13 +686,13 @@ class Tomo:
         """
         preprocess = self.config.get('preprocess')
         if preprocess is None:
-            img_x_bounds = [0, self.tbf.shape[0]]
+            img_x_bounds = [None, None]
         else:
             img_x_bounds = preprocess.get('img_x_bounds', [0, self.tbf.shape[0]])
         if self.test_mode:
             # Update config and save to file
             if preprocess is None:
-                self.cf.config['preprocess'] = {'img_x_bounds' : img_x_bounds}
+                self.cf.config['preprocess'] = {'img_x_bounds' : [0, self.tbf.shape[0]]}
             else:
                 preprocess['img_x_bounds'] = img_x_bounds
             self.cf.saveFile(self.config_out)
@@ -757,7 +734,7 @@ class Tomo:
                     save_fig=True, save_only=True)
             msnc.quickPlot((range(x_sum.size), x_sum),
                     ([img_x_bounds[0], img_x_bounds[0]], [x_sum.min(), x_sum.max()], 'r-'),
-                    ([img_x_bounds[1], img_x_bounds[1]], [x_sum.min(), x_sum.max()], 'r-'),
+                    ([img_x_bounds[1]-1, img_x_bounds[1]-1], [x_sum.min(), x_sum.max()], 'r-'),
                     title='sum over theta and y', name=detectorbounds_pngname,
                     save_fig=True, save_only=True)
             
@@ -794,12 +771,12 @@ class Tomo:
                     img_x_bounds[1] = x_sum.size
                 tomo_tmp = tomo_stack[0,:,:]
                 tomo_tmp[img_x_bounds[0],:] = tomo_stack[0,:,:].max()
-                tomo_tmp[img_x_bounds[1],:] = tomo_stack[0,:,:].max()
+                tomo_tmp[img_x_bounds[1]-1,:] = tomo_stack[0,:,:].max()
                 title = f'tomography image at theta={self.config["theta_range"]["start"]}'
                 msnc.quickImshow(tomo_stack[0,:,:], title=title)
                 msnc.quickPlot((range(x_sum.size), x_sum),
                         ([img_x_bounds[0], img_x_bounds[0]], [x_sum.min(), x_sum.max()], 'r-'),
-                        ([img_x_bounds[1], img_x_bounds[1]], [x_sum.min(), x_sum.max()], 'r-'),
+                        ([img_x_bounds[1]-1, img_x_bounds[1]-1], [x_sum.min(), x_sum.max()], 'r-'),
                         title='sum over theta and y')
                 print(f'lower bound = {img_x_bounds[0]} (inclusive)\n'+
                         f'upper bound = {img_x_bounds[1]} (exclusive)]')
@@ -812,7 +789,7 @@ class Tomo:
                     logging.warning('Image bounds and pixel size prevent seamless stacking')
                 tomo_tmp = tomo_stack[0,:,:]
                 tomo_tmp[img_x_bounds[0],:] = tomo_stack[0,:,:].max()
-                tomo_tmp[img_x_bounds[1],:] = tomo_stack[0,:,:].max()
+                tomo_tmp[img_x_bounds[1]-1,:] = tomo_stack[0,:,:].max()
                 title = f'tomography image at theta={self.config["theta_range"]["start"]}'
                 msnc.quickImshow(tomo_stack[0,:,:], title=title, path=self.output_folder,
                         save_fig=self.save_plots, save_only=True)
@@ -832,7 +809,7 @@ class Tomo:
                     img_x_bounds[1] = x_sum.size
                 msnc.quickPlot((range(x_sum.size), x_sum),
                         ([img_x_bounds[0], img_x_bounds[0]], [x_sum.min(), x_sum.max()], 'r-'),
-                        ([img_x_bounds[1], img_x_bounds[1]], [x_sum.min(), x_sum.max()], 'r-'),
+                        ([img_x_bounds[1]-1, img_x_bounds[1]-1], [x_sum.min(), x_sum.max()], 'r-'),
                         title='sum over theta and y')
                 print(f'lower bound = {img_x_bounds[0]} (inclusive)\n'+
                         f'upper bound = {img_x_bounds[1]} (exclusive)]')
@@ -841,7 +818,8 @@ class Tomo:
                 fit = msnc.fitStep(y=x_sum, model='rectangle', form='atan')
                 x_low = fit.get('center1', None)
                 x_upp = fit.get('center2', None)
-                if x_low is not None and x_low >= 0 and x_upp is not None and x_low < x_upp < x_sum.size:
+                if (x_low is not None and x_low >= 0 and x_upp is not None and
+                        x_low < x_upp < x_sum.size):
                     x_low = int(x_low-(x_upp-x_low)/10)
                     if x_low < 0:
                         x_low = 0
@@ -1274,6 +1252,58 @@ class Tomo:
             tomopy.misc.corr.remove_ring(tomo_recon_stack, rwidth=rwidth, out=tomo_recon_stack)
         return tomo_recon_stack
 
+    def findImageFiles(self):
+        """Find all available image files.
+        """
+        self.is_valid = True
+
+        # Find dark field images
+        dark_field = self.config['dark_field']
+        img_start, num_imgs, dark_files = msnc.findImageFiles(
+                dark_field['data_path'], self.config['data_filetype'], 'dark field')
+        if img_start < 0 or num_imgs < 1:
+            logging.error('Unable to find suitable dark field images')
+            if dark_field['data_path']:
+                self.is_valid = False
+        dark_field['num'] = num_imgs
+        dark_field['img_start'] = img_start
+        logging.info(f'Number of dark field images = {dark_field["num"]}')
+        logging.info(f'Dark field image start index = {dark_field["img_start"]}')
+
+        # Find bright field images
+        bright_field = self.config['bright_field']
+        img_start, num_imgs, bright_files  = msnc.findImageFiles(
+                bright_field['data_path'], self.config['data_filetype'], 'bright field')
+        if img_start < 0 or num_imgs < 1:
+            logging.error('Unable to find suitable bright field images')
+            self.is_valid = False
+        bright_field['num'] = num_imgs
+        bright_field['img_start'] = img_start
+        logging.info(f'Number of bright field images = {bright_field["num"]}')
+        logging.info(f'Bright field image start index = {bright_field["img_start"]}')
+
+        # Find tomography images
+        tomo_stack_files = []
+        for stack in self.config['stack_info']['stacks']:
+            index = stack['index']
+            img_start, num_imgs, tomo_files = msnc.findImageFiles(
+                    stack['data_path'], self.config['data_filetype'], f'tomography set {index}')
+            if img_start < 0 or num_imgs < 1:
+                logging.error('Unable to find suitable tomography images')
+                self.is_valid = False
+            stack['num'] = num_imgs
+            stack['img_start'] = img_start
+            logging.info(f'Number of tomography images for set {index} = {stack["num"]}')
+            logging.info(f'Tomography set {index} image start index = {stack["img_start"]}')
+            tomo_stack_files.append(tomo_files)
+            del tomo_files
+
+        # Safe updated config
+        if self.is_valid:
+            self.cf.saveFile(self.config_out)
+
+        return dark_files, bright_files, tomo_stack_files
+
     def genTomoStacks(self, tdf_files=None, tbf_files=None, tomo_stack_files=None,
             dark_field_pngname=None, bright_field_pngname=None, tomo_field_pngname=None,
             detectorbounds_pngname=None, output_name=None):
@@ -1329,7 +1359,7 @@ class Tomo:
 
             # Check required image files (skip in Galaxy)
             if not self.galaxy_flag:
-                self.selectImageRanges(available_stacks)
+                self._selectImageRanges(available_stacks)
                 if not self.is_valid:
                     return
 
@@ -1919,7 +1949,7 @@ def runTomo(config_file=None, config_dict=None, output_folder='.', log_level='IN
     if preprocess:
         preprocessed_stacks = [stack['index'] for stack in tomo.config['stack_info']['stacks']
             if stack.get('preprocessed', False)]
-    if len(preprocessed_stacks):
+    if not len(preprocessed_stacks):
         tomo.genTomoStacks()
         if not tomo.is_valid:
             IOError('Unable to load all required image files.')
@@ -1933,7 +1963,7 @@ def runTomo(config_file=None, config_dict=None, output_folder='.', log_level='IN
 #        combined_stacks = tomo.config.get('combined_stacks')
 #        if combined_stacks:
 #            combined_stacks['completed'] = False
-        tomo.cf.saveFile(self.config_out)
+        tomo.cf.saveFile(tomo.config_out)
 
     # Find centers
     find_center = tomo.config.get('find_center')

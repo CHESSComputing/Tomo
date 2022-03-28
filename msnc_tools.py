@@ -14,13 +14,19 @@ import sys
 import re
 import yaml
 import h5py
-import pyinputplus as pyip
+try:
+    import pyinputplus as pyip
+except:
+    pass
 import numpy as np
 import imageio as img
 import matplotlib.pyplot as plt
 from time import time
 from ast import literal_eval
-from lmfit.models import StepModel, RectangleModel
+try:
+    from lmfit.models import StepModel, RectangleModel
+except:
+    pass
 
 def depth_list(L): return isinstance(L, list) and max(map(depth_list, L))+1
 def depth_tuple(T): return isinstance(T, tuple) and max(map(depth_tuple, T))+1
@@ -82,7 +88,7 @@ def get_trailing_int(string):
     else:
         return int(mo.group())
 
-def findImageFiles(path, filetype, name=None, select_range=False, num_required=None):
+def findImageFiles(path, filetype, name=None):
     if isinstance(name, str):
         name = f' {name} '
     else:
@@ -184,8 +190,8 @@ def selectImageRange(first_index, offset, num_imgs, name=None, num_required=None
             if first_index == last_index:
                 num_imgs = 1
             else:
-                num_imgs = pyip.inputInt(f'Enter the number of images [1, {num_imgs}]: ',
-                        min=1, max=num_imgs)
+                num_imgs = pyip.inputInt(f'Enter the number of images [1, {num_imgs-offset}]: ',
+                        min=1, max=num_imgs-offset)
         else:
             offset = pyip.inputInt(f'Enter the first index [{first_index}, {last_index}]: ',
                     min=first_index, max=last_index)-first_index
@@ -444,8 +450,8 @@ def selectArrayBounds(a, x_low=None, x_upp=None, num_x_min=None,
         if not is_int(x_upp, x_low+num_x_min, a.size):
             illegal_value('x_upp', x_upp, 'selectArrayBounds')
             return None
-    print(f'lower bound = {x_low} (inclusive)\nupper bound = {x_upp} (exclusive)]')
     bounds = [x_low, x_upp]
+    print(f'lower bound = {x_low} (inclusive)\nupper bound = {x_upp} (exclusive)]')
     #quickPlot(range(bounds[0], bounds[1]), a[bounds[0]:bounds[1]], title=title)
     quickPlot((range(a.size), a), ([bounds[0], bounds[0]], [a.min(), a.max()], 'r-'),
             ([bounds[1], bounds[1]], [a.min(), a.max()], 'r-'), title=title)
@@ -521,7 +527,6 @@ def selectImageBounds(a, axis, low=None, upp=None, num_min=None,
         if not is_int(upp, low+num_min, a.shape[axis]):
             illegal_value('upp', upp, 'selectImageBounds')
             return None
-    print(f'lower bound = {low} (inclusive)\nupper bound = {upp} (exclusive)')
     bounds = [low, upp]
     a_tmp = a
     if axis:
@@ -530,6 +535,7 @@ def selectImageBounds(a, axis, low=None, upp=None, num_min=None,
     else:
         a_tmp[bounds[0],:] = a.max()
         a_tmp[bounds[1],:] = a.max()
+    print(f'lower bound = {low} (inclusive)\nupper bound = {upp} (exclusive)')
     quickImshow(a_tmp, title=title)
     if pyip.inputYesNo('Accept these bounds ([y]/n)?: ', blank=True) == 'no':
         bounds = selectImageBounds(a, title=title)
