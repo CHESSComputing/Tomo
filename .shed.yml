@@ -2,5 +2,5 @@ categories:
 - Structural Materials Analysis
 description: Preprocess tomography images
 name: tomo_setup
-owner: ximgchess
-remote_repository_url: https://github.com/ximg-chess/galaxytools/tools/tomo
+owner: rolfverberg
+remote_repository_url: https://github.com/rolfverberg/galaxytools

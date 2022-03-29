@@ -33,12 +33,12 @@
         <section name="thetas" title="Tomography angles">
             <param name="theta_start" type="float" min="0.0" max="360.0" value="0.0" label="Lower bound"/>
             <param name="theta_end" type="float" min="0.0" max="360.0" value="0.0" label="Upper bound"/>
-            <param name="num_thetas" type="integer" min="0" label="Number of angles"/>
+            <param name="num_thetas" type="integer" min="1" value="1" label="Number of angles"/>
         </section>
         <repeat name='tomo_sets' title="Tomography image sets">
             <param name="inputs" type="data_collection" label="Image file collection"/>
-            <param name="offset" type="integer" min="0" label="Image index offset"/>
-            <param name="num" type="integer" min="1" label="Number of images"/>
+            <param name="offset" type="integer" min="0" value="0" label="Image index offset"/>
+            <param name="num" type="integer" min="1" value="1" label="Number of images"/>
         </repeat>
     </inputs>
     <outputs>
