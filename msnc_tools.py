@@ -36,7 +36,7 @@ def is_int(v, v_min=None, v_max=None):
     """
     if not isinstance(v, int):
         return False
-    if (v_min != None and v < v_min) or (v_max != None and v > v_max):
+    if (v_min is not None and v < v_min) or (v_max is not None and v > v_max):
         return False
     return True
 
@@ -45,7 +45,7 @@ def is_num(v, v_min=None, v_max=None):
     """
     if not isinstance(v, (int,float)):
         return False
-    if (v_min != None and v < v_min) or (v_max != None and v > v_max):
+    if (v_min is not None and v < v_min) or (v_max is not None and v > v_max):
         return False
     return True
 
@@ -54,17 +54,17 @@ def is_index(v, v_min=0, v_max=None):
     """
     if not isinstance(v, int):
         return False
-    if v < v_min or (v_max != None and v >= v_max):
+    if v < v_min or (v_max is not None and v >= v_max):
         return False
     return True
 
 def is_index_range(v, v_min=0, v_max=None):
-    """Value is an array index range in range v_min <= v[0] <= v[1] < v_max.
+    """Value is an array index range in range v_min <= v[0] <= v[1] <= v_max.
     """
     if not (isinstance(v, list) and len(v) == 2 and isinstance(v[0], int) and
             isinstance(v[1], int)):
         return False
-    if not 0 <= v[0] < v[1] or (v_max != None and v[1] >= v_max):
+    if not 0 <= v[0] <= v[1] or (v_max is not None and v[1] > v_max):
         return False
     return True
 
@@ -83,7 +83,7 @@ def illegal_value(name, value, location=None, exit_flag=False):
 def get_trailing_int(string):
     indexRegex = re.compile(r'\d+$')
     mo = indexRegex.search(string)
-    if mo == None:
+    if mo is None:
         return None
     else:
         return int(mo.group())
@@ -108,7 +108,7 @@ def findImageFiles(path, filetype, name=None):
             return -1, 0, []
         first_index = indexRegex.search(files[0]).group()
         last_index = indexRegex.search(files[-1]).group()
-        if first_index == None or last_index == None:
+        if first_index is None or last_index is None:
             logging.error('Unable to find correctly indexed'+name+'images')
             return -1, 0, []
         first_index = int(first_index)
@@ -151,18 +151,19 @@ def selectImageRange(first_index, offset, num_imgs, name=None, num_required=None
             use_input = pyip.inputYesNo('\nCurrent'+name+'first index/offset = '+
                     f'{first_index}/{offset}, use these values ([y]/n)? ',
                     blank=True)
-        if use_input != 'no':
-            use_input = pyip.inputYesNo('Current number of'+name+'images = '+
-                    f'{num_imgs}, use this value ([y]/n)? ',
-                    blank=True)
-    if use_input == 'yes':
+        if num_required is None:
+            if use_input != 'no':
+                use_input = pyip.inputYesNo('Current number of'+name+'images = '+
+                        f'{num_imgs}, use this value ([y]/n)? ',
+                        blank=True)
+    if use_input != 'no':
         return first_index, offset, num_imgs
 
     # Check range against requirements
     if num_imgs < 1:
         logging.warning('No available'+name+'images')
         return -1, -1, 0
-    if num_required == None:
+    if num_required is None:
         if num_imgs == 1:
             return first_index, 0, 1
     else:
@@ -175,7 +176,8 @@ def selectImageRange(first_index, offset, num_imgs, name=None, num_required=None
             return -1, -1, 0
 
     # Select index range
-    if num_required == None:
+    print('\nThe number of available'+name+f'images is {num_imgs}')
+    if num_required is None:
         last_index = first_index+num_imgs
         use_all = f'Use all ([{first_index}, {last_index}])'
         pick_offset = 'Pick a first index offset and a number of images'
@@ -229,7 +231,7 @@ def loadImage(f, img_x_bounds=None, img_y_bounds=None):
         img_y_bounds = [0, img_read.shape[1]]
     else:
         if (not isinstance(img_y_bounds, list) or len(img_y_bounds) != 2 or 
-                not (0 <= img_y_bounds[0] < img_y_bounds[1] <= img_read.shape[0])):
+                not (0 <= img_y_bounds[0] < img_y_bounds[1] <= img_read.shape[1])):
             logging.error(f'inconsistent column dimension in {f}')
             return None
     return img_read[img_x_bounds[0]:img_x_bounds[1],img_y_bounds[0]:img_y_bounds[1]]
@@ -296,7 +298,7 @@ def clearFig(title):
 
 def quickImshow(a, title=None, path=None, name=None, save_fig=False, save_only=False,
             clear=True, **kwargs):
-    if title != None and not isinstance(title, str):
+    if title is not None and not isinstance(title, str):
         illegal_value('title', title, 'quickImshow')
         return
     if path is not None and not isinstance(path, str):
@@ -343,7 +345,7 @@ def quickImshow(a, title=None, path=None, name=None, save_fig=False, save_only=F
 
 def quickPlot(*args, title=None, path=None, name=None, save_fig=False, save_only=False,
         clear=True, **kwargs):
-    if title != None and not isinstance(title, str):
+    if title is not None and not isinstance(title, str):
         illegal_value('title', title, 'quickPlot')
         return
     if path is not None and not isinstance(path, str):
@@ -402,13 +404,16 @@ def selectArrayBounds(a, x_low=None, x_upp=None, num_x_min=None,
     if not isinstance(a, np.ndarray) or a.ndim != 1:
         logging.error('Illegal array type or dimension in selectArrayBounds')
         return None
-    if num_x_min == None:
+    x_low_save = x_low
+    x_upp_save = x_upp
+    num_x_min_save = num_x_min
+    if num_x_min is None:
         num_x_min = 1
     else:
         if num_x_min < 2 or num_x_min > a.size:
             logging.warning('Illegal input for num_x_min in selectArrayBounds, input ignored')
             num_x_min = 1
-    if x_low == None:
+    if x_low is None:
         x_min = 0
         x_max = a.size
         x_low_max = a.size-num_x_min
@@ -429,7 +434,7 @@ def selectArrayBounds(a, x_low=None, x_upp=None, num_x_min=None,
         if not is_int(x_low, 0, a.size-num_x_min):
             illegal_value('x_low', x_low, 'selectArrayBounds')
             return None
-    if x_upp == None:
+    if x_upp is None:
         x_min = x_low+num_x_min
         x_max = a.size
         x_upp_min = x_min
@@ -456,7 +461,7 @@ def selectArrayBounds(a, x_low=None, x_upp=None, num_x_min=None,
     quickPlot((range(a.size), a), ([bounds[0], bounds[0]], [a.min(), a.max()], 'r-'),
             ([bounds[1], bounds[1]], [a.min(), a.max()], 'r-'), title=title)
     if pyip.inputYesNo('Accept these bounds ([y]/n)?: ', blank=True) == 'no':
-        bounds = selectArrayBounds(a, title=title)
+        bounds = selectArrayBounds(a, x_low_save, x_upp_save, num_x_min_save, title=title)
     return bounds
 
 def selectImageBounds(a, axis, low=None, upp=None, num_min=None,
@@ -469,13 +474,16 @@ def selectImageBounds(a, axis, low=None, upp=None, num_min=None,
     if axis < 0 or axis >= a.ndim:
         illegal_value('axis', axis, 'selectImageBounds')
         return None
-    if num_min == None:
+    low_save = low
+    upp_save = upp
+    num_min_save = num_min
+    if num_min is None:
         num_min = 1
     else:
         if num_min < 2 or num_min > a.shape[axis]:
             logging.warning('Illegal input for num_min in selectImageBounds, input ignored')
             num_min = 1
-    if low == None:
+    if low is None:
         min_ = 0
         max_ = a.shape[axis]
         low_max = a.shape[axis]-num_min
@@ -501,7 +509,7 @@ def selectImageBounds(a, axis, low=None, upp=None, num_min=None,
         if not is_int(low, 0, a.shape[axis]-num_min):
             illegal_value('low', low, 'selectImageBounds')
             return None
-    if upp == None:
+    if upp is None:
         min_ = low+num_min
         max_ = a.shape[axis]
         upp_min = min_
@@ -538,7 +546,8 @@ def selectImageBounds(a, axis, low=None, upp=None, num_min=None,
     print(f'lower bound = {low} (inclusive)\nupper bound = {upp} (exclusive)')
     quickImshow(a_tmp, title=title)
     if pyip.inputYesNo('Accept these bounds ([y]/n)?: ', blank=True) == 'no':
-        bounds = selectImageBounds(a, title=title)
+        bounds = selectImageBounds(a, axis, low=low_save, upp=upp_save, num_min=num_min_save,
+            title=title)
     return bounds
 
 def fitStep(x=None, y=None, model='step', form='arctan'):
@@ -690,14 +699,14 @@ class Config:
 #                        break
 #        else:
 #            # Insert new key/value pair
-#            if search_string != None:
+#            if search_string is not None:
 #                if isinstance(search_string, str):
 #                    search_string = [search_string]
 #                elif not isinstance(search_string, (tuple, list)):
 #                    illegal_value('search_string', search_string, 'Config.update')
 #                    search_string = None
 #            update_flag = False
-#            if search_string != None:
+#            if search_string is not None:
 #                indices = [[index for index,line in enumerate(lines) if item in line]
 #                        for item in search_string]
 #                for i,index in enumerate(indices):

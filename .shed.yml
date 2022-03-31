@@ -1,6 +1,6 @@
 categories:
 - Structural Materials Analysis
 description: Preprocess tomography images
-name: tomo_setup
-owner: rolfverberg
+name: tomo
+owner: rv43
 remote_repository_url: https://github.com/rolfverberg/galaxytools

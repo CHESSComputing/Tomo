@@ -52,17 +52,17 @@ def __main__():
     logging.basicConfig(format=logging_format, level=level, force=True,
             handlers=[logging.StreamHandler()])
 
-    logging.info(f'config = {args.config}')
-    logging.info(f'theta_range = {args.theta_range.split()}')
-    logging.info(f'dark = {args.dark}')
-    logging.info(f'bright = {args.bright}')
-    logging.info(f'tomo = {args.tomo}')
-    logging.info(f'detectorbounds = {args.detectorbounds}')
-    logging.info(f'output_config = {args.output_config}')
-    logging.info(f'output_data = {args.output_data}')
-    logging.info(f'log = {args.log}')
-    logging.info(f'is log stdout? {args.log is sys.stdout}')
-    logging.info(f'tomoranges = {args.tomo_ranges}')
+    logging.debug(f'config = {args.config}')
+    logging.debug(f'theta_range = {args.theta_range.split()}')
+    logging.debug(f'dark = {args.dark}')
+    logging.debug(f'bright = {args.bright}')
+    logging.debug(f'tomo = {args.tomo}')
+    logging.debug(f'detectorbounds = {args.detectorbounds}')
+    logging.debug(f'output_config = {args.output_config}')
+    logging.debug(f'output_data = {args.output_data}')
+    logging.debug(f'log = {args.log}')
+    logging.debug(f'is log stdout? {args.log is sys.stdout}')
+    logging.debug(f'tomoranges = {args.tomo_ranges}')
 
     # Read input files and collect data files info
     datasets = []

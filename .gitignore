@@ -4,4 +4,5 @@
 .spyproject
 __pycache__
 backup
-tests/output/actual/**
+tests/test1/output/actual/**
+tests/test2/output/actual/**

@@ -1,0 +1,60 @@
+bright_field:
+  data_path: /nfs/chess/scratch/user/rv43/2022-1/id3b/sobhani-3249-A/tomo7C/tomo7C_flat_ANDOR2_001.h5
+  img_offset: 1
+  img_start: 1
+  num: 20
+combine_stacks:
+  stacks:
+  - 1
+  x_bounds:
+  - 600
+  - 1100
+  y_bounds:
+  - 250
+  - 1450
+  z_bounds:
+  - 0
+  - 330
+dark_field:
+  data_path: null
+  img_offset: -1
+  img_start: -1
+  num: 0
+data_filetype: h5
+detector:
+  columns: 1700
+  id: andor2
+  pixel_size: 0.0013
+  rows: 1436
+find_center:
+  center_stack_index: 1
+  completed: true
+  lower_center_offset: -49.75
+  lower_row: 50
+  row_bounds:
+  - 0
+  - 330
+  upper_center_offset: -49.0
+  upper_row: 270
+preprocess:
+  img_x_bounds:
+  - 620
+  - 950
+  num_theta_skip: 0
+  zoom_perc: 100
+stack_info:
+  num: 1
+  stacks:
+  - data_path: /nfs/chess/scratch/user/rv43/2022-1/id3b/sobhani-3249-A/tomo7C/tomo7C_ANDOR2_001.h5
+    img_offset: 1
+    img_start: 1
+    index: 1
+    num: 354
+    preprocessed: true
+    reconstructed: true
+    ref_height: 0.8059999999999999
+theta_range:
+  end: 180.0
+  num: 354
+  start: 0.0
+work_folder: /nfs/chess/scratch/user/rv43/2022-1/id3b/sobhani-3249-A

@@ -1,0 +1,46 @@
+2022-03-31 12:55:02,562 : WARNING - tomo : __init__ - Ignoring log_level argument in test mode
+2022-03-31 12:55:02,582 : INFO - tomo : validate - work_folder: /nfs/chess/scratch/user/rv43/2022-1/id3b/sobhani-3249-A
+2022-03-31 12:55:02,582 : INFO - tomo : _validate_yaml - num_tomo_stacks = 1
+2022-03-31 12:55:02,582 : INFO - tomo : validate - dark field images path = None
+2022-03-31 12:55:02,582 : INFO - tomo : validate - bright field images path = /nfs/chess/scratch/user/rv43/2022-1/id3b/sobhani-3249-A/tomo7C/tomo7C_flat_ANDOR2_001.h5
+2022-03-31 12:55:02,582 : INFO - tomo : validate - tomography data paths:
+2022-03-31 12:55:02,582 : INFO - tomo : validate -     /nfs/chess/scratch/user/rv43/2022-1/id3b/sobhani-3249-A/tomo7C/tomo7C_ANDOR2_001.h5
+2022-03-31 12:55:02,582 : INFO - tomo : validate - tomography data path indices: [1]
+2022-03-31 12:55:02,583 : INFO - tomo : validate - tomography reference heights: [0.0]
+2022-03-31 12:55:02,587 : INFO - msnc_tools : saveFile - Saving tests/test1/output/expected//config.yaml
+2022-03-31 12:55:02,645 : INFO - tomo : __init__ - num_core = 48
+2022-03-31 12:55:02,645 : ERROR - msnc_tools : illegal_value - Illegal value for path in findImageRange (None, <class 'NoneType'>)
+2022-03-31 12:55:02,645 : ERROR - tomo : findImageFiles - Unable to find suitable dark field images
+2022-03-31 12:55:02,645 : INFO - tomo : findImageFiles - Number of dark field images = 0
+2022-03-31 12:55:02,645 : INFO - tomo : findImageFiles - Dark field image start index = -1
+2022-03-31 12:55:02,687 : INFO - tomo : findImageFiles - Number of bright field images = 20
+2022-03-31 12:55:02,687 : INFO - tomo : findImageFiles - Bright field image start index = 1
+2022-03-31 12:55:02,767 : INFO - tomo : findImageFiles - Number of tomography images for set 1 = 354
+2022-03-31 12:55:02,767 : INFO - tomo : findImageFiles - Tomography set 1 image start index = 1
+2022-03-31 12:55:02,767 : INFO - msnc_tools : saveFile - Updating tests/test1/output/expected//config.yaml
+2022-03-31 12:55:02,778 : ERROR - tomo : _selectImageRanges - Unable to find suitable dark field images
+2022-03-31 12:55:02,778 : INFO - msnc_tools : saveFile - Updating tests/test1/output/expected//config.yaml
+2022-03-31 12:55:04,601 : INFO - msnc_tools : loadImageStack - ... done in 1.81 seconds!
+2022-03-31 12:55:05,535 : WARNING - tomo : _genBright - Dark field unavailable
+2022-03-31 12:55:05,536 : INFO - msnc_tools : saveFile - Updating tests/test1/output/expected//config.yaml
+2022-03-31 12:55:05,578 : INFO - tomo : _setZoomOrSkip - zoom_perc = 100
+2022-03-31 12:55:05,579 : INFO - tomo : _setZoomOrSkip - num_theta_skip = 0
+2022-03-31 12:55:05,579 : INFO - msnc_tools : saveFile - Updating tests/test1/output/expected//config.yaml
+2022-03-31 12:55:05,591 : WARNING - tomo : _genTomo - Dark field unavailable
+2022-03-31 12:55:12,831 : INFO - msnc_tools : loadImageStack - ... done in 7.24 seconds!
+2022-03-31 12:55:15,674 : INFO - msnc_tools : saveFile - Updating tests/test1/output/expected//config.yaml
+2022-03-31 12:55:15,686 : INFO - msnc_tools : saveFile - Updating tests/test1/output/expected//config.yaml
+2022-03-31 12:55:15,697 : INFO - msnc_tools : saveFile - Updating tests/test1/output/expected//config.yaml
+2022-03-31 12:55:15,708 : INFO - tomo : findCenters - n1 = 0, n2 = 330 (n2-n1) = 0.429 mm
+2022-03-31 12:55:15,708 : INFO - tomo : findCenters - Determine center offset at sample row boundaries
+2022-03-31 12:55:43,378 : INFO - tomo : findCenters - Lower center offset = -49.75
+2022-03-31 12:55:43,382 : INFO - msnc_tools : saveFile - Updating tests/test1/output/expected//config.yaml
+2022-03-31 12:56:12,065 : INFO - tomo : findCenters - upper_center_offset = -49.0
+2022-03-31 12:56:12,067 : INFO - msnc_tools : saveFile - Updating tests/test1/output/expected//config.yaml
+2022-03-31 12:56:22,099 : INFO - algorithm : _dist_recon - Reconstructing 48 slice groups with 48 master threads...
+2022-03-31 12:56:23,883 : INFO - algorithm : _dist_recon - Reconstructing 48 slice groups with 48 master threads...
+2022-03-31 12:57:26,271 : INFO - tomo : reconstructTomoStacks - Reconstruction of stack 1 took 74.15 seconds!
+2022-03-31 12:57:26,277 : INFO - msnc_tools : saveFile - Updating tests/test1/output/expected//config.yaml
+2022-03-31 12:57:27,279 : INFO - tomo : combineTomoStacks - Combining reconstructed stacks ...
+2022-03-31 12:57:27,280 : INFO - tomo : combineTomoStacks - ... done in 0.00 seconds!
+2022-03-31 12:57:28,856 : INFO - msnc_tools : saveFile - Updating tests/test1/output/expected//config.yaml

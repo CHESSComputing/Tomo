@@ -1,4 +1,4 @@
-<tool id="tomo_setup" name="Tomo Setup" version="0.1.0" python_template_version="3.9">
+<tool id="tomo_setup" name="Tomo Setup" version="0.1.1" python_template_version="3.9">
     <description>Preprocess tomography images</description>
     <requirements>
         <requirement type="package" version="1.11.0">tomopy</requirement>
@@ -10,12 +10,12 @@
         -i inputfiles.txt
         -c '$config'
         --theta_range '$thetas.theta_start $thetas.theta_end $thetas.num_thetas'
-        --dark '$dark'
-        --bright '$bright'
-        --tomo '$tomo'
-        --detectorbounds '$detectorbounds'
-        --output_data '$output_data'
-        --output_config '$output_config'
+        --dark 'dark_field.png'
+        --bright 'bright_field.png'
+        --tomo 'tomo.png'
+        --detectorbounds 'detectorbounds.png'
+        --output_data 'output.npz'
+        --output_config 'output_config.yaml'
         -l '$log'
 #for $s in $tomo_sets# ${s.offset} ${s.num} #end for
     ]]></command>
@@ -43,12 +43,12 @@
     </inputs>
     <outputs>
         <data name="inputfiles" format="txt" label="Input files" from_work_dir="inputfiles.txt" hidden="true"/>
-        <data name="dark" format="png" label="Dark field"/>
-        <data name="bright" format="png" label="Bright field"/>
-        <data name="tomo" format="png" label="First tomography image"/>
-        <data name="detectorbounds" format="png" label="Detector bounds"/>
-        <data name="output_data" format="npz" label="Preprocessed tomography data"/>
-        <data name="output_config" format="txt" label="Output config"/>
+        <data name="dark_field" format="png" label="Dark field" from_work_dir="dark_field.png"/>
+        <data name="bright_field" format="png" label="Bright field" from_work_dir="bright_field.png"/>
+        <data name="tomo" format="png" label="First tomography image" from_work_dir="tomo.png"/>
+        <data name="detectorbounds" format="png" label="Detector bounds" from_work_dir="detectorbounds.png"/>
+        <data name="output_data" format="npz" label="Preprocessed tomography data" from_work_dir="output_data.npz"/>
+        <data name="output_config" format="yaml" label="Output config" from_work_dir="output_config.yaml"/>
         <data name="log" format="txt" label="Log"/>
     </outputs>
     <help><![CDATA[
