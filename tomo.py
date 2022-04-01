@@ -1359,6 +1359,21 @@ class Tomo:
 
         return dark_files, bright_files, tomo_stack_files
 
+    def loadTomoStacks(self, input_name):
+        """Load tomography stacks (only for Galaxy).
+        """
+        assert(self.galaxy_flag)
+        t0 = time()
+        logging.info(f'Loading preprocessed tomography stack from {input_name} ...')
+        stack_info = self.config['stack_info']
+        stacks = stack_info.get('stacks')
+        assert(len(self.tomo_stacks) == stack_info['num'])
+        with np.load(input_name) as f:
+            for i,stack in enumerate(stacks):
+                self.tomo_stacks[i] = f[f'set_{stack["index"]}']
+                print(f'loaded stack {i} index {stack["index"]}: {self.tomo_stacks[i].shape}')
+        logging.info(f'... done in {time()-t0:.2f} seconds!')
+
     def genTomoStacks(self, tdf_files=None, tbf_files=None, tomo_stack_files=None,
             dark_field_pngname=None, bright_field_pngname=None, tomo_field_pngname=None,
             detectorbounds_pngname=None, output_name=None):
