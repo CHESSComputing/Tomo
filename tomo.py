@@ -34,13 +34,16 @@ class set_numexpr_threads:
 
     def __init__(self, num_core):
         cpu_count = mp.cpu_count()
+        logging.debug(f'start: num_core={num_core} cpu_count={cpu_count}')
         if num_core is None or num_core < 1 or num_core > cpu_count:
             self.num_core = cpu_count
         else:
             self.num_core = num_core
+        logging.debug(f'self.num_core={self.num_core}')
 
     def __enter__(self):
         self.num_core_org = ne.set_num_threads(self.num_core)
+        logging.debug(f'self.num_core={self.num_core}')
 
     def __exit__(self, exc_type, exc_value, traceback):
         ne.set_num_threads(self.num_core_org)
@@ -1083,7 +1086,7 @@ class Tomo:
         del tbf
 
     def _reconstructOnePlane(self, tomo_plane_T, center, thetas_deg, eff_pixel_size,
-            cross_sectional_dim, plot_sinogram=True):
+            cross_sectional_dim, plot_sinogram=True, num_core=1):
         """Invert the sinogram for a single tomography plane.
         """
         # tomo_plane_T index order: column,theta
@@ -1117,7 +1120,7 @@ class Tomo:
         recon_sinogram = spi.gaussian_filter(recon_sinogram, 0.5)
         recon_clean = np.expand_dims(recon_sinogram, axis=0)
         del recon_sinogram
-        recon_clean = tomopy.misc.corr.remove_ring(recon_clean, rwidth=17)
+        recon_clean = tomopy.misc.corr.remove_ring(recon_clean, rwidth=17, ncore=num_core)
         logging.debug(f'filtering and removing ring artifact took {time()-t0:.2f} seconds!')
         return recon_clean
 
@@ -1134,7 +1137,7 @@ class Tomo:
         del edges
 
     def _findCenterOnePlane(self, sinogram, row, thetas_deg, eff_pixel_size, cross_sectional_dim,
-            tol=0.1):
+            tol=0.1, num_core=1):
         """Find center for a single tomography plane.
         """
         # sinogram index order: theta,column
@@ -1143,12 +1146,12 @@ class Tomo:
         center = sinogram.shape[1]/2
 
         # try automatic center finding routines for initial value
-        tomo_center = tomopy.find_center_vo(sinogram)
+        tomo_center = tomopy.find_center_vo(sinogram, ncore=num_core)
         center_offset_vo = tomo_center-center
         if not self.test_mode:
             print(f'Center at row {row} using Nghia Vo’s method = {center_offset_vo:.2f}')
         recon_plane = self._reconstructOnePlane(sinogram_T, tomo_center, thetas_deg,
-                eff_pixel_size, cross_sectional_dim, False)
+                eff_pixel_size, cross_sectional_dim, False, num_core)
         if not self.test_mode:
             base_name=f'edges row{row} center_offset_vo{center_offset_vo:.2f}'
             self._plotEdgesOnePlane(recon_plane, base_name)
@@ -1168,7 +1171,7 @@ class Tomo:
             center_offset = tomo_center-center
             print(f'Center at row {row} using phase correlation = {center_offset:.2f}')
             recon_plane = self._reconstructOnePlane(sinogram_T, tomo_center, thetas_deg,
-                    eff_pixel_size, cross_sectional_dim, False)
+                    eff_pixel_size, cross_sectional_dim, False, num_core)
             base_name=f'edges row{row} center_offset{center_offset:.2f}'
             self._plotEdgesOnePlane(recon_plane, base_name)
         accept_center = 'yes'
@@ -1204,7 +1207,7 @@ class Tomo:
                         center_offset_step):
                 logging.info(f'center_offset = {center_offset}')
                 recon_plane = self._reconstructOnePlane(sinogram_T, center_offset+center,
-                        thetas_deg, eff_pixel_size, cross_sectional_dim, False)
+                        thetas_deg, eff_pixel_size, cross_sectional_dim, False, num_core)
                 base_name=f'edges row{row} center_offset{center_offset}'
                 self._plotEdgesOnePlane(recon_plane, base_name)
             if pyip.inputInt('\nContinue (0) or end the search (1): ', min=0, max=1):
@@ -1266,7 +1269,8 @@ class Tomo:
                     init_recon=tomo_recon_stack, options=options, sinogram_order=True,
                     algorithm=tomopy.astra, ncore=num_core)
         if True:
-            tomopy.misc.corr.remove_ring(tomo_recon_stack, rwidth=rwidth, out=tomo_recon_stack)
+            tomopy.misc.corr.remove_ring(tomo_recon_stack, rwidth=rwidth, out=tomo_recon_stack,
+                    ncore=num_core)
         return tomo_recon_stack
 
     def findImageFiles(self):
@@ -1474,9 +1478,11 @@ class Tomo:
             stack['ref_height'] = stack['ref_height']+pixel_size
         self.cf.saveFile(self.config_out)
 
-    def findCenters(self):
+    def findCenters(self, num_core=None):
         """Find rotation axis centers for the tomography stacks.
         """
+        if num_core is None:
+            num_core = self.num_core
         logging.debug('Find centers for tomography stacks')
         stacks = self.config['stack_info']['stacks']
         available_stacks = [stack['index'] for stack in stacks if stack.get('preprocessed', False)]
@@ -1620,7 +1626,7 @@ class Tomo:
                     msnc.clearFig(f'theta={theta_start}')
             # center_stack order: row,theta,column
             center_offset = self._findCenterOnePlane(center_stack[row,:,:], row, thetas_deg,
-                    eff_pixel_size, cross_sectional_dim)
+                    eff_pixel_size, cross_sectional_dim, num_core=num_core)
         logging.info(f'Lower center offset = {center_offset}')
 
         # Update config and save to file
@@ -1662,7 +1668,7 @@ class Tomo:
                     msnc.clearFig(f'theta={theta_start}')
             # center_stack order: row,theta,column
             center_offset = self._findCenterOnePlane(center_stack[row,:,:], row, thetas_deg,
-                    eff_pixel_size, cross_sectional_dim)
+                    eff_pixel_size, cross_sectional_dim, num_core=num_core)
         logging.info(f'upper_center_offset = {center_offset}')
         del center_stack
 
@@ -1746,9 +1752,11 @@ class Tomo:
         # Update config file
         self.config = msnc.update('config.txt', 'check_centers', True, 'find_centers')
 
-    def reconstructTomoStacks(self):
+    def reconstructTomoStacks(self, num_core=None):
         """Reconstruct tomography stacks.
         """
+        if num_core is None:
+            num_core = self.num_core
         logging.debug('Reconstruct tomography stacks')
         stacks = self.config['stack_info']['stacks']
         assert(len(self.tomo_stacks) == self.config['stack_info']['num'])
@@ -1823,7 +1831,7 @@ class Tomo:
                         upper_center_offset+(self.tomo_stacks[i].shape[0]-1-upper_row)*center_slope]
                 t0 = time()
                 self.tomo_recon_stacks[i]= self._reconstructOneTomoStack(self.tomo_stacks[i],
-                        thetas, center_offsets=center_offsets, sigma=0.1, num_core=self.num_core,
+                        thetas, center_offsets=center_offsets, sigma=0.1, num_core=num_core,
                         algorithm='gridrec', run_secondary_sirt=True, secondary_iter=25)
                 logging.info(f'Reconstruction of stack {index} took {time()-t0:.2f} seconds!')
                 if not self.test_mode:
@@ -2110,6 +2118,7 @@ if __name__ == '__main__':
             default=False,
             help='Test mode flag')
     parser.add_argument('--num_core',
+            type=int,
             default=-1,
             help='Number of cores')
     args = parser.parse_args()
