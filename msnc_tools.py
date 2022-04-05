@@ -297,7 +297,7 @@ def clearFig(title):
     plt.close(fig=re.sub(r"\s+", '_', title))
 
 def quickImshow(a, title=None, path=None, name=None, save_fig=False, save_only=False,
-            clear=True, **kwargs):
+            clear=True, extent=None, show_grid=False, grid_color='w', grid_linewidth=1, **kwargs):
     if title is not None and not isinstance(title, str):
         illegal_value('title', title, 'quickImshow')
         return
@@ -327,24 +327,32 @@ def quickImshow(a, title=None, path=None, name=None, save_fig=False, save_only=F
             path = name
         else:
             path = f'{path}/{name}'
+    if extent is None:
+        extent = (0, a.shape[1], a.shape[0], 0)
     if clear:
         plt.close(fig=title)
     if save_only:
         plt.figure(title)
-        plt.imshow(a, **kwargs)
+        plt.imshow(a, extent=extent, **kwargs)
+        if show_grid:
+            ax = plt.gca()
+            ax.grid(color=grid_color, linewidth=grid_linewidth)
         plt.savefig(path)
         plt.close(fig=title)
         #plt.imsave(f'{title}.png', a, **kwargs)
     else:
         plt.ion()
         plt.figure(title)
-        plt.imshow(a, **kwargs)
+        plt.imshow(a, extent=extent, **kwargs)
+        if show_grid:
+            ax = plt.gca()
+            ax.grid(color=grid_color, linewidth=grid_linewidth)
         if save_fig:
             plt.savefig(path)
         plt.pause(1)
 
 def quickPlot(*args, title=None, path=None, name=None, save_fig=False, save_only=False,
-        clear=True, **kwargs):
+        clear=True, show_grid=False, **kwargs):
     if title is not None and not isinstance(title, str):
         illegal_value('title', title, 'quickPlot')
         return
@@ -383,6 +391,9 @@ def quickPlot(*args, title=None, path=None, name=None, save_fig=False, save_only
                plt.plot(*y, **kwargs)
         else:
             plt.plot(*args, **kwargs)
+        if show_grid:
+            ax = plt.gca()
+            ax.grid(color='k')#, linewidth=1)
         plt.savefig(path)
         plt.close(fig=title)
     else:
@@ -393,6 +404,9 @@ def quickPlot(*args, title=None, path=None, name=None, save_fig=False, save_only
                plt.plot(*y, **kwargs)
         else:
             plt.plot(*args, **kwargs)
+        if show_grid:
+            ax = plt.gca()
+            ax.grid(color='k')#, linewidth=1)
         if save_fig:
             plt.savefig(path)
         plt.pause(1)
@@ -536,15 +550,17 @@ def selectImageBounds(a, axis, low=None, upp=None, num_min=None,
             illegal_value('upp', upp, 'selectImageBounds')
             return None
     bounds = [low, upp]
-    a_tmp = a
+    a_tmp = np.copy(a)
+    a_tmp_max = a.max()
     if axis:
-        a_tmp[:,bounds[0]] = a.max()
-        a_tmp[:,bounds[1]] = a.max()
+        a_tmp[:,bounds[0]] = a_tmp_max
+        a_tmp[:,bounds[1]-1] = a_tmp_max
     else:
-        a_tmp[bounds[0],:] = a.max()
-        a_tmp[bounds[1],:] = a.max()
+        a_tmp[bounds[0],:] = a_tmp_max
+        a_tmp[bounds[1]-1,:] = a_tmp_max
     print(f'lower bound = {low} (inclusive)\nupper bound = {upp} (exclusive)')
     quickImshow(a_tmp, title=title)
+    del a_tmp
     if pyip.inputYesNo('Accept these bounds ([y]/n)?: ', blank=True) == 'no':
         bounds = selectImageBounds(a, axis, low=low_save, upp=upp_save, num_min=num_min_save,
             title=title)

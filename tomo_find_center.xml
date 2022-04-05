@@ -1,0 +1,49 @@
+<tool id="tomo_find_center" name="Tomo Find Center Axis" version="0.1.0" python_template_version="3.9">
+    <description>Find the center axis for a tomography reconstruction</description>
+    <requirements>
+        <requirement type="package" version="1.11.0">tomopy</requirement>
+        <requirement type="package" version="3.6.0">h5py</requirement>
+    </requirements>
+    <command detect_errors="exit_code"><![CDATA[
+        $__tool_directory__/tomo_find_center.py
+        -i '$red_stacks'
+        -c '$config'
+        --row_bounds '$row_bound_low $row_bound_upp'
+        --center_rows '$lower_row $upper_row'
+        --output_config 'output_config.yaml'
+        --recon_center_low 'recon_center_low.png'
+        --recon_center_upp 'recon_center_upp.png'
+        -l '$log'
+#for $s in $tomo_sets# ${s.offset} ${s.num} #end for
+    ]]></command>
+    <inputs>
+        <param name="red_stacks" type='data' format='npz' optional='false' label="Reduced stacks"/>
+        <param name="config" type='data' format='yaml' optional='false' label="Input config"/>
+        <section name="row_bounds" title="Reconstruction row bounds">
+            <param name="row_bound_low" type="integer" label="Lower bound"/>
+            <param name="row_bound_upp" type="integer" label="Upper bound"/>
+        </section>
+        <section name="recon_centers" title="Reconstruction rows to establish center axis">
+            <param name="lower_row" type="integer" label="Lower row"/>
+            <param name="upper_row" type="integer" label="Upper row"/>
+        </section>
+    </inputs>
+    <outputs>
+        <data name="output_config" format="yaml" label="Output config" from_work_dir="output_config.yaml"/>
+        <data name="recon_center_low" format="png" label="Recontructed slice lower center" from_work_dir="recon_center_low.png"/>
+        <data name="recon_center_upp" format="png" label="Recontructed slice upper center" from_work_dir="recon_center_upp.png"/>
+        <data name="log" format="txt" label="Log"/>
+    </outputs>
+    <help><![CDATA[
+        Preprocess tomography images.
+    ]]></help>
+    <citations>
+        <citation type="bibtex">
+@misc{githubsum_files,
+  author = {Verberg, Rolf},
+  year = {2022},
+  title = {Tomo Find Center Axis},
+}</citation>
+    </citations>
+
+</tool>
