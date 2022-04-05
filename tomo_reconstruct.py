@@ -3,7 +3,6 @@
 import logging
 
 import sys
-import re
 import argparse
 
 from tomo import Tomo
@@ -12,30 +11,20 @@ def __main__():
 
     # Parse command line arguments
     parser = argparse.ArgumentParser(
-            description='Find the center axis for a tomography reconstruction')
+            description='Perfrom a tomography reconstruction')
     parser.add_argument('-i', '--input_stacks',
             help='Preprocessed image file stacks')
     parser.add_argument('-c', '--config',
             help='Input config')
-    parser.add_argument('--row_bounds',
-            help='Reconstruction row bounds')
-    parser.add_argument('--center_rows',
-            help='Center finding rows')
     parser.add_argument('--output_config',
             help='Output config')
-    parser.add_argument('--recon_center_low',
-            help='Lower reconstructed slice center')
-    parser.add_argument('--recon_center_upp',
-            help='Upper reconstructed slice center')
+    parser.add_argument('--output_data',
+            help='Reconstructed tomography data')
     parser.add_argument('-l', '--log', 
             type=argparse.FileType('w'),
             default=sys.stdout,
             help='Log file')
     args = parser.parse_args()
-
-    indexRegex = re.compile(r'\d+')
-    row_bounds = [int(i) for i in indexRegex.findall(args.row_bounds)]
-    center_rows = [int(i) for i in indexRegex.findall(args.center_rows)]
 
     # Set basic log configuration
     logging_format = '%(asctime)s : %(levelname)s - %(module)s : %(funcName)s - %(message)s'
@@ -48,11 +37,8 @@ def __main__():
 
     logging.debug(f'input_stacks = {args.input_stacks}')
     logging.debug(f'config = {args.config}')
-    logging.debug(f'row_bounds = {args.row_bounds} {row_bounds}')
-    logging.debug(f'center_rows = {args.center_rows} {center_rows}')
     logging.debug(f'output_config = {args.output_config}')
-    logging.debug(f'recon_center_low = {args.recon_center_low}')
-    logging.debug(f'recon_center_uppm = {args.recon_center_upp}')
+    logging.debug(f'output_data = {args.output_data}')
     logging.debug(f'log = {args.log}')
     logging.debug(f'is log stdout? {args.log is sys.stdout}')
 
@@ -66,8 +52,8 @@ def __main__():
     # Load preprocessed image files
     tomo.loadTomoStacks(args.input_stacks)
 
-    # Find centers
-    tomo.findCenters(row_bounds, center_rows, args.recon_center_low, args.recon_center_upp)
+    # Reconstruct tomography stacks
+    tomo.reconstructTomoStacks(args.output_data)
 
 if __name__ == "__main__":
     __main__()

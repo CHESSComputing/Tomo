@@ -14,7 +14,6 @@
         --recon_center_low 'recon_center_low.png'
         --recon_center_upp 'recon_center_upp.png'
         -l '$log'
-#for $s in $tomo_sets# ${s.offset} ${s.num} #end for
     ]]></command>
     <inputs>
         <param name="red_stacks" type='data' format='npz' optional='false' label="Reduced stacks"/>

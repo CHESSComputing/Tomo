@@ -1842,7 +1842,7 @@ class Tomo:
         # Update config file
         self.config = msnc.update('config.txt', 'check_centers', True, 'find_centers')
 
-    def reconstructTomoStacks(self, num_core=None):
+    def reconstructTomoStacks(self, output_name=None, num_core=None):
         """Reconstruct tomography stacks.
         """
         if num_core is None:
@@ -1852,6 +1852,12 @@ class Tomo:
         assert(len(self.tomo_stacks) == self.config['stack_info']['num'])
         assert(len(self.tomo_stacks) == len(stacks))
         assert(len(self.tomo_recon_stacks) == len(stacks))
+        if self.galaxy_flag:
+            assert(isinstance(output_name, str))
+        else:
+            if output_name:
+                logging.warning('Ignoring output_name in reconstructTomoStacks '+
+                    '(only used in Galaxy)')
 
         # Get rotation axis rows and centers
         find_center = self.config['find_center']
@@ -1897,56 +1903,65 @@ class Tomo:
             # reconstructed stack order for each one in stack : row/z,x,y
             # preprocessed stack order for each one in stack: row,theta,column
             index = stack['index']
-            available = False
-            if stack.get('reconstructed', False):
-                self.tomo_recon_stacks[i], available = self._loadTomo('recon stack', index)
-            if self.tomo_recon_stacks[i].size or available:
-                if self.tomo_stacks[i].size:
-                    self.tomo_stacks[i] = np.array([])
-                assert(stack.get('preprocessed', False) == True)
-                assert(stack.get('reconstructed', False) == True)
-                continue
-            else:
-                stack['reconstructed'] = False
-                if not self.tomo_stacks[i].size:
-                    self.tomo_stacks[i], available = self._loadTomo('red stack', index,
-                            required=True)
-                if not self.tomo_stacks[i].size:
-                    logging.error(f'Unable to load tomography stack {index} for reconstruction')
-                    stack[i]['preprocessed'] = False
-                    load_error = True
+            if not self.galaxy_flag:
+                available = False
+                if stack.get('reconstructed', False):
+                    self.tomo_recon_stacks[i], available = self._loadTomo('recon stack', index)
+                if self.tomo_recon_stacks[i].size or available:
+                    if self.tomo_stacks[i].size:
+                        self.tomo_stacks[i] = np.array([])
+                    assert(stack.get('preprocessed', False) == True)
+                    assert(stack.get('reconstructed', False) == True)
                     continue
-                assert(0 <= lower_row < upper_row < self.tomo_stacks[i].shape[0])
-                center_offsets = [lower_center_offset-lower_row*center_slope,
-                        upper_center_offset+(self.tomo_stacks[i].shape[0]-1-upper_row)*center_slope]
-                t0 = time()
-                self.tomo_recon_stacks[i]= self._reconstructOneTomoStack(self.tomo_stacks[i],
-                        thetas, center_offsets=center_offsets, sigma=0.1, num_core=num_core,
-                        algorithm='gridrec', run_secondary_sirt=True, secondary_iter=25)
-                logging.info(f'Reconstruction of stack {index} took {time()-t0:.2f} seconds!')
-                if not self.test_mode:
-                    row_slice = int(self.tomo_stacks[i].shape[0]/2) 
-                    title = f'{basetitle} {index} slice{row_slice}'
-                    msnc.quickImshow(self.tomo_recon_stacks[i][row_slice,:,:], title=title,
-                            path=self.output_folder, save_fig=self.save_plots,
-                            save_only=self.save_plots_only)
-                    msnc.quickPlot(self.tomo_recon_stacks[i]
-                            [row_slice,int(self.tomo_recon_stacks[i].shape[2]/2),:],
-                            title=f'{title} cut{int(self.tomo_recon_stacks[i].shape[2]/2)}',
-                            path=self.output_folder, save_fig=self.save_plots,
-                            save_only=self.save_plots_only)
-                    self._saveTomo('recon stack', self.tomo_recon_stacks[i], index)
-#                else:
-#                    np.savetxt(self.output_folder+f'recon_stack_{index}.txt',
-#                            self.tomo_recon_stacks[i][row_slice,:,:], fmt='%.6e')
-                self.tomo_stacks[i] = np.array([])
+            stack['reconstructed'] = False
+            if not self.tomo_stacks[i].size:
+                self.tomo_stacks[i], available = self._loadTomo('red stack', index,
+                        required=True)
+            if not self.tomo_stacks[i].size:
+                logging.error(f'Unable to load tomography stack {index} for reconstruction')
+                stack[i]['preprocessed'] = False
+                load_error = True
+                continue
+            assert(0 <= lower_row < upper_row < self.tomo_stacks[i].shape[0])
+            center_offsets = [lower_center_offset-lower_row*center_slope,
+                    upper_center_offset+(self.tomo_stacks[i].shape[0]-1-upper_row)*center_slope]
+            t0 = time()
+            self.tomo_recon_stacks[i]= self._reconstructOneTomoStack(self.tomo_stacks[i],
+                    thetas, center_offsets=center_offsets, sigma=0.1, num_core=num_core,
+                    algorithm='gridrec', run_secondary_sirt=True, secondary_iter=25)
+            logging.info(f'Reconstruction of stack {index} took {time()-t0:.2f} seconds!')
+            if not self.test_mode and not self.galaxy_flag:
+                row_slice = int(self.tomo_stacks[i].shape[0]/2) 
+                title = f'{basetitle} {index} slice{row_slice}'
+                msnc.quickImshow(self.tomo_recon_stacks[i][row_slice,:,:], title=title,
+                        path=self.output_folder, save_fig=self.save_plots,
+                        save_only=self.save_plots_only)
+                msnc.quickPlot(self.tomo_recon_stacks[i]
+                        [row_slice,int(self.tomo_recon_stacks[i].shape[2]/2),:],
+                        title=f'{title} cut{int(self.tomo_recon_stacks[i].shape[2]/2)}',
+                        path=self.output_folder, save_fig=self.save_plots,
+                        save_only=self.save_plots_only)
+                self._saveTomo('recon stack', self.tomo_recon_stacks[i], index)
+#            else:
+#                np.savetxt(self.output_folder+f'recon_stack_{index}.txt',
+#                        self.tomo_recon_stacks[i][row_slice,:,:], fmt='%.6e')
+            self.tomo_stacks[i] = np.array([])
 
-                # Update config and save to file
-                stack['reconstructed'] = True
-                combine_stacks = self.config.get('combine_stacks')
-                if combine_stacks and index in combine_stacks.get('stacks', []):
-                    combine_stacks['stacks'].remove(index)
-                self.cf.saveFile(self.config_out)
+            # Update config and save to file
+            stack['reconstructed'] = True
+            combine_stacks = self.config.get('combine_stacks')
+            if combine_stacks and index in combine_stacks.get('stacks', []):
+                combine_stacks['stacks'].remove(index)
+            self.cf.saveFile(self.config_out)
+
+        # Save reconstructed tomography stack to file
+        if self.galaxy_flag:
+            t0 = time()
+            logging.info(f'Saving reconstructed tomography stack to {output_name} ...')
+            save_stacks = {f'set_{stack["index"]}':tomo_stack
+                    for stack,tomo_stack in zip(stacks,self.tomo_recon_stacks)}
+            np.savez(output_name, **save_stacks)
+            logging.info(f'... done in {time()-t0:.2f} seconds!')
 
     def combineTomoStacks(self):
         """Combine the reconstructed tomography stacks.
