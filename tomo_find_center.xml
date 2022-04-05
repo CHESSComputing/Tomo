@@ -19,12 +19,12 @@
         <param name="red_stacks" type='data' format='npz' optional='false' label="Reduced stacks"/>
         <param name="config" type='data' format='yaml' optional='false' label="Input config"/>
         <section name="row_bounds" title="Reconstruction row bounds">
-            <param name="row_bound_low" type="integer" label="Lower bound"/>
-            <param name="row_bound_upp" type="integer" label="Upper bound"/>
+            <param name="row_bound_low" type="integer" value="-1" label="Lower bound"/>
+            <param name="row_bound_upp" type="integer" value="-1" label="Upper bound"/>
         </section>
         <section name="recon_centers" title="Reconstruction rows to establish center axis">
-            <param name="lower_row" type="integer" label="Lower row"/>
-            <param name="upper_row" type="integer" label="Upper row"/>
+            <param name="lower_row" type="integer" value="-1" label="Lower row"/>
+            <param name="upper_row" type="integer" value="-1" label="Upper row"/>
         </section>
     </inputs>
     <outputs>
