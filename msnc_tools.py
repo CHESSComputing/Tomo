@@ -620,9 +620,9 @@ class Config:
             logging.error(f'Unable to load {config_file}')
             return
 
-        # Load config file
+        # Load config file (for now for Galaxy, allow .dat extension)
         self.suffix = os.path.splitext(config_file)[1]
-        if self.suffix == '.yml' or self.suffix == '.yaml':
+        if self.suffix == '.yml' or self.suffix == '.yaml' or self.suffix == '.dat':
             with open(config_file, 'r') as f:
                 self.config = yaml.safe_load(f)
         elif self.suffix == '.txt':

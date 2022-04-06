@@ -8,8 +8,8 @@
         $__tool_directory__/tomo_find_center.py
         -i '$red_stacks'
         -c '$config'
-        --row_bounds '$row_bound_low $row_bound_upp'
-        --center_rows '$lower_row $upper_row'
+        --row_bounds '$row_bounds.row_bound_low $row_bounds.row_bound_upp'
+        --center_rows '$recon_centers.lower_row $recon_centers.upper_row'
         --output_config 'output_config.yaml'
         --recon_center_low 'recon_center_low.png'
         --recon_center_upp 'recon_center_upp.png'
