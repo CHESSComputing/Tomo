@@ -1166,7 +1166,7 @@ class Tomo:
         del edges
 
     def _findCenterOnePlane(self, sinogram, row, thetas_deg, eff_pixel_size, cross_sectional_dim,
-            tol=0.1, num_core=1, recon_pngname=None):
+            tol=0.1, num_core=1, recon_pngname=None, galaxy_param=None):
         """Find center for a single tomography plane.
         """
         # sinogram index order: theta,column
@@ -1177,79 +1177,106 @@ class Tomo:
         # try automatic center finding routines for initial value
         tomo_center = tomopy.find_center_vo(sinogram, ncore=num_core)
         center_offset_vo = tomo_center-center
-        if self.test_mode or self.galaxy_flag:
+        if self.test_mode:
             logging.info(f'Center at row {row} using Nghia Vo’s method = {center_offset_vo:.2f}')
-            if self.test_mode:
+            del sinogram_T
+            return float(center_offset_vo)
+        elif self.galaxy_flag:
+            logging.info(f'Center at row {row} using Nghia Vo’s method = {center_offset_vo:.2f}')
+            if recon_pngname:
+                assert(isinstance(recon_pngname, str))
+                recon_plane = self._reconstructOnePlane(sinogram_T, tomo_center, thetas_deg,
+                        eff_pixel_size, cross_sectional_dim, False, num_core)
+                title = os.path.basename(recon_pngname)
+                self._plotEdgesOnePlane(recon_plane, title, name=recon_pngname)
+                del recon_plane
+            if not galaxy_param or not galaxy_param['center_type_selector']:
                 del sinogram_T
                 return float(center_offset_vo)
         else:
             print(f'Center at row {row} using Nghia Vo’s method = {center_offset_vo:.2f}')
             if recon_pngname:
                 logging.warning('Ignoring recon_pngname in _findCenterOnePlane (only for Galaxy)')
-        recon_plane = self._reconstructOnePlane(sinogram_T, tomo_center, thetas_deg,
-                eff_pixel_size, cross_sectional_dim, False, num_core)
-        if self.galaxy_flag:
-            assert(isinstance(recon_pngname, str))
-            title = os.path.basename(recon_pngname)
-            self._plotEdgesOnePlane(recon_plane, title, name=recon_pngname)
-            del sinogram_T
-            del recon_plane
-            return float(center_offset_vo)
-        else:
-            title = f'edges row{row} center_offset_vo{center_offset_vo:.2f}'
-            self._plotEdgesOnePlane(recon_plane, title)
-        if (pyip.inputYesNo('Try finding center using phase correlation '+
-                '(y/[n])? ', blank=True) == 'yes'):
-            tomo_center = tomopy.find_center_pc(sinogram, sinogram, tol=0.1,
-                    rotc_guess=tomo_center)
-            error = 1.
-            while error > tol:
-                prev = tomo_center
-                tomo_center = tomopy.find_center_pc(sinogram, sinogram, tol=tol,
-                        rotc_guess=tomo_center)
-                error = np.abs(tomo_center-prev)
-            center_offset = tomo_center-center
-            print(f'Center at row {row} using phase correlation = {center_offset:.2f}')
             recon_plane = self._reconstructOnePlane(sinogram_T, tomo_center, thetas_deg,
                     eff_pixel_size, cross_sectional_dim, False, num_core)
-            title = f'edges row{row} center_offset{center_offset:.2f}'
+            title = f'edges row{row} center_offset_vo{center_offset_vo:.2f}'
             self._plotEdgesOnePlane(recon_plane, title)
-        if (pyip.inputYesNo('Accept a center location ([y]) or continue '+
-                'search (n)? ', blank=True) != 'no'):
-            del sinogram_T
-            del recon_plane
-            center_offset = pyip.inputNum(
-                    f'    Enter chosen center offset [{-int(center)}, {int(center)}] '+
-                    f'([{center_offset_vo}])): ', blank=True)
-            if center_offset == '':
-                center_offset = center_offset_vo
-            return float(center_offset)
+        if not self.galaxy_flag:
+            if (pyip.inputYesNo('Try finding center using phase correlation '+
+                    '(y/[n])? ', blank=True) == 'yes'):
+                tomo_center = tomopy.find_center_pc(sinogram, sinogram, tol=0.1,
+                        rotc_guess=tomo_center)
+                error = 1.
+                while error > tol:
+                    prev = tomo_center
+                    tomo_center = tomopy.find_center_pc(sinogram, sinogram, tol=tol,
+                            rotc_guess=tomo_center)
+                    error = np.abs(tomo_center-prev)
+                center_offset = tomo_center-center
+                print(f'Center at row {row} using phase correlation = {center_offset:.2f}')
+                recon_plane = self._reconstructOnePlane(sinogram_T, tomo_center, thetas_deg,
+                        eff_pixel_size, cross_sectional_dim, False, num_core)
+                title = f'edges row{row} center_offset{center_offset:.2f}'
+                self._plotEdgesOnePlane(recon_plane, title)
+            if (pyip.inputYesNo('Accept a center location ([y]) or continue '+
+                    'search (n)? ', blank=True) != 'no'):
+                center_offset = pyip.inputNum(
+                        f'    Enter chosen center offset [{-int(center)}, {int(center)}] '+
+                        f'([{center_offset_vo:.2f}])): ', blank=True)
+                if center_offset == '':
+                    center_offset = center_offset_vo
+                del sinogram_T
+                del recon_plane
+                return float(center_offset)
 
+        # perform center finding search
         while True:
-            center_offset_low = pyip.inputInt('\nEnter lower bound for center offset '+
-                    f'[{-int(center)}, {int(center)}]: ', min=-int(center), max=int(center))
-            center_offset_upp = pyip.inputInt('Enter upper bound for center offset '+
-                    f'[{center_offset_low}, {int(center)}]: ',
-                    min=center_offset_low, max=int(center))
-            if center_offset_upp == center_offset_low:
-                center_offset_step = 1
+            if self.galaxy_flag and galaxy_param and galaxy_param['center_type_selector']:
+                set_center = center_offset_vo
+                if galaxy_param['center_type_selector'] == 'user':
+                    set_center = galaxy_param['set_center']
+                set_range = galaxy_param['set_range']
+                center_offset_step = galaxy_param['set_step']
+                if (not msnc.is_num(set_range, 0) or not msnc.is_num(center_offset_step) or
+                        center_offset_step <= 0):
+                    logging.warning('Illegal center finding search parameter, skip search')
+                    del sinogram_T
+                    return float(center_offset_vo)
+                set_range = center_offset_step*max(1, int(set_range/center_offset_step))
+                center_offset_low = set_center-set_range
+                center_offset_upp = set_center+set_range
             else:
-                center_offset_step = pyip.inputInt('Enter step size for center offset search '+
-                        f'[1, {center_offset_upp-center_offset_low}]: ',
-                        min=1, max=center_offset_upp-center_offset_low)
-            for center_offset in range(center_offset_low, center_offset_upp+center_offset_step, 
-                        center_offset_step):
-                logging.info(f'center_offset = {center_offset}')
+                center_offset_low = pyip.inputInt('\nEnter lower bound for center offset '+
+                        f'[{-int(center)}, {int(center)}]: ', min=-int(center), max=int(center))
+                center_offset_upp = pyip.inputInt('Enter upper bound for center offset '+
+                        f'[{center_offset_low}, {int(center)}]: ',
+                        min=center_offset_low, max=int(center))
+                if center_offset_upp == center_offset_low:
+                    center_offset_step = 1
+                else:
+                    center_offset_step = pyip.inputInt('Enter step size for center offset search '+
+                            f'[1, {center_offset_upp-center_offset_low}]: ',
+                            min=1, max=center_offset_upp-center_offset_low)
+            num_center_offset = 1+int((center_offset_upp-center_offset_low)/center_offset_step)
+            center_offsets = np.linspace(center_offset_low, center_offset_upp, num_center_offset)
+            for center_offset in center_offsets:
+                if center_offset == center_offset_vo:
+                    continue
+                logging.info(f'center_offset = {center_offset:.2f}')
                 recon_plane = self._reconstructOnePlane(sinogram_T, center_offset+center,
                         thetas_deg, eff_pixel_size, cross_sectional_dim, False, num_core)
-                title = f'edges row{row} center_offset{center_offset}'
+                title = f'edges row{row} center_offset{center_offset:.2f}'
                 self._plotEdgesOnePlane(recon_plane, title)
-            if pyip.inputInt('\nContinue (0) or end the search (1): ', min=0, max=1):
+            if self.galaxy_flag or pyip.inputInt('\nContinue (0) or end the search (1): ',
+                    min=0, max=1):
                 break
 
         del sinogram_T
         del recon_plane
-        center_offset = pyip.inputNum(f'    Enter chosen center offset '+
+        if self.galaxy_flag:
+            center_offset = center_offset_vo
+        else:
+            center_offset = pyip.inputNum(f'    Enter chosen center offset '+
                 f'[{-int(center)}, {int(center)}]: ', min=-int(center), max=int(center))
         return float(center_offset)
 
@@ -1513,8 +1540,7 @@ class Tomo:
             stack['ref_height'] = stack['ref_height']+pixel_size
         self.cf.saveFile(self.config_out)
 
-    def findCenters(self, row_bounds=None, center_rows=None, recon_low_pngname=None,
-            recon_upp_pngname=None, num_core=None):
+    def findCenters(self, galaxy_param=None, num_core=None):
         """Find rotation axis centers for the tomography stacks.
         """
         if num_core is None:
@@ -1524,23 +1550,26 @@ class Tomo:
         available_stacks = [stack['index'] for stack in stacks if stack.get('preprocessed', False)]
         logging.debug('Available stacks: {available_stacks}')
         if self.galaxy_flag:
-            assert(isinstance(row_bounds, list) and len(row_bounds) == 2)
-            assert(isinstance(center_rows, list) and len(center_rows) == 2)
-            assert(isinstance(recon_low_pngname, str))
-            assert(isinstance(recon_upp_pngname, str))
+            assert(isinstance(galaxy_param, dict))
+            row_bounds = galaxy_param['row_bounds']
+            center_rows = galaxy_param['center_rows']
+            if center_rows is None:
+                logging.error('Missing center_rows entry in galaxy_param')
+                return
+            center_type_selector = galaxy_param['center_type_selector']
+            if center_type_selector:
+                if center_type_selector == 'vo':
+                    set_center = None
+                elif center_type_selector == 'user':
+                    set_center = galaxy_param['set_center']
+                else:
+                    logging.error('Illegal center_type_selector entry in galaxy_param '+
+                            f'({center_type_selector})')
+                    galaxy_param['center_type_selector'] = None
         else:
-            if row_bounds:
-                logging.warning('Ignoring row_bounds in findCenters (only for Galaxy)')
-                row_bounds = None
-            if center_rows:
-                logging.warning('Ignoring center_rows in findCenters (only for Galaxy)')
-                center_rows = None
-            if recon_low_pngname:
-                logging.warning('Ignoring recon_low_pngname in findCenters (only for Galaxy)')
-                recon_low_pngname = None
-            if recon_upp_pngname:
-                logging.warning('Ignoring recon_upp_pngname in findCenters (only for Galaxy)')
-                recon_upp_pngname = None
+            if galaxy_param:
+                logging.warning('Ignoring galaxy_param in findCenters (only for Galaxy)')
+                galaxy_param = None
 
         # Check for valid available center stack index
         find_center = self.config.get('find_center')
@@ -1610,6 +1639,15 @@ class Tomo:
             row_bounds = find_center.get('row_bounds', None)
             center_rows = [find_center.get('lower_row', None),
                     find_center.get('upper_row', None)]
+        if row_bounds is None:
+            row_bounds = [0, center_stack.shape[0]]
+        if row_bounds[0] == -1:
+            row_bounds[0] = 0
+        if row_bounds[1] == -1:
+            row_bounds[1] = center_stack.shape[0]
+        if not msnc.is_index_range(row_bounds, 0, center_stack.shape[0]):
+            msnc.illegal_value('row_bounds', row_bounds)
+            return
 
         # Set thetas (in degrees)
         theta_range = self.config['theta_range']
@@ -1687,9 +1725,10 @@ class Tomo:
         use_row = 'no'
         use_center = 'no'
         row = center_rows[0]
+        if self.test_mode or self.galaxy_flag:
+            assert(msnc.is_int(row, n1, n2-2))
         if msnc.is_int(row, n1, n2-2):
             if self.test_mode or self.galaxy_flag:
-                assert(row is not None)
                 use_row = 'yes'
             else:
                 msnc.quickImshow(center_stack[:,0,:], title=f'theta={theta_start}', aspect='auto')
@@ -1714,9 +1753,15 @@ class Tomo:
                 if self.save_plots_only:
                     msnc.clearFig(f'theta={theta_start}')
             # center_stack order: row,theta,column
+            if galaxy_param:
+                recon_pngname = galaxy_param['recon_center_low']
+            else:
+                recon_pngname = None
             center_offset = self._findCenterOnePlane(center_stack[row,:,:], row, thetas_deg,
                     eff_pixel_size, cross_sectional_dim, num_core=num_core,
-                    recon_pngname=recon_low_pngname)
+                    recon_pngname=recon_pngname, galaxy_param=galaxy_param)
+        logging.info(f'lower_center_offset = {center_offset:.2f} {type(center_offset)}')
+        print(center_offset)
 
         # Update config and save to file
         find_center['row_bounds'] = [n1, n2]
@@ -1729,9 +1774,10 @@ class Tomo:
         use_row = 'no'
         use_center = 'no'
         row = center_rows[1]
+        if self.test_mode or self.galaxy_flag:
+            assert(msnc.is_int(row, lower_row+1, n2-1))
         if msnc.is_int(row, lower_row+1, n2-1):
             if self.test_mode or self.galaxy_flag:
-                assert(row is not None)
                 use_row = 'yes'
             else:
                 msnc.quickImshow(center_stack[:,0,:], title=f'theta={theta_start}', aspect='auto')
@@ -1756,10 +1802,14 @@ class Tomo:
                 if self.save_plots_only:
                     msnc.clearFig(f'theta={theta_start}')
             # center_stack order: row,theta,column
+            if galaxy_param:
+                recon_pngname = galaxy_param['recon_center_upp']
+            else:
+                recon_pngname = None
             center_offset = self._findCenterOnePlane(center_stack[row,:,:], row, thetas_deg,
                     eff_pixel_size, cross_sectional_dim, num_core=num_core,
-                    recon_pngname=recon_upp_pngname)
-        logging.info(f'upper_center_offset = {center_offset}')
+                    recon_pngname=recon_pngname, galaxy_param=galaxy_param)
+        logging.info(f'upper_center_offset = {center_offset:.2f}')
         del center_stack
 
         # Update config and save to file

@@ -3,7 +3,6 @@
 import logging
 
 import sys
-import re
 import argparse
 
 from tomo import Tomo
@@ -14,28 +13,30 @@ def __main__():
     parser = argparse.ArgumentParser(
             description='Find the center axis for a tomography reconstruction')
     parser.add_argument('-i', '--input_stacks',
-            help='Preprocessed image file stacks')
+            required=True, help='Preprocessed image file stacks')
     parser.add_argument('-c', '--config',
-            help='Input config')
+            required=True, help='Input config')
     parser.add_argument('--row_bounds',
-            help='Reconstruction row bounds')
+            required=True, nargs=2, type=int, help='Reconstruction row bounds')
     parser.add_argument('--center_rows',
-            help='Center finding rows')
+            required=True, nargs=2, type=int, help='Center finding rows')
+    parser.add_argument('--center_type_selector',
+            help='Reconstruct slices for a set of center positions?')
+    parser.add_argument('--set_center',
+            type=int, help='Set center ')
+    parser.add_argument('--set_range',
+            type=float, help='Set range')
+    parser.add_argument('--set_step',
+            type=float, help='Set step')
     parser.add_argument('--output_config',
-            help='Output config')
+            required=True, help='Output config')
     parser.add_argument('--recon_center_low',
-            help='Lower reconstructed slice center')
+            help='Lower reconstructed slice center image name')
     parser.add_argument('--recon_center_upp',
-            help='Upper reconstructed slice center')
+            help='Upper reconstructed slice center image name')
     parser.add_argument('-l', '--log', 
-            type=argparse.FileType('w'),
-            default=sys.stdout,
-            help='Log file')
+            type=argparse.FileType('w'), default=sys.stdout, help='Log file')
     args = parser.parse_args()
-
-    indexRegex = re.compile(r'\d+')
-    row_bounds = [int(i) for i in indexRegex.findall(args.row_bounds)]
-    center_rows = [int(i) for i in indexRegex.findall(args.center_rows)]
 
     # Set basic log configuration
     logging_format = '%(asctime)s : %(levelname)s - %(module)s : %(funcName)s - %(message)s'
@@ -48,11 +49,15 @@ def __main__():
 
     logging.debug(f'input_stacks = {args.input_stacks}')
     logging.debug(f'config = {args.config}')
-    logging.debug(f'row_bounds = {args.row_bounds} {row_bounds}')
-    logging.debug(f'center_rows = {args.center_rows} {center_rows}')
+    logging.debug(f'row_bounds = {args.row_bounds} {type(args.row_bounds)}')
+    logging.debug(f'center_rows = {args.center_rows} {type(args.center_rows)}')
+    logging.debug(f'center_type_selector = {args.center_type_selector}')
+    logging.debug(f'set_center = {args.set_center}')
+    logging.debug(f'set_range = {args.set_range}')
+    logging.debug(f'set_step = {args.set_step}')
     logging.debug(f'output_config = {args.output_config}')
     logging.debug(f'recon_center_low = {args.recon_center_low}')
-    logging.debug(f'recon_center_uppm = {args.recon_center_upp}')
+    logging.debug(f'recon_center_upp = {args.recon_center_upp}')
     logging.debug(f'log = {args.log}')
     logging.debug(f'is log stdout? {args.log is sys.stdout}')
 
@@ -67,7 +72,11 @@ def __main__():
     tomo.loadTomoStacks(args.input_stacks)
 
     # Find centers
-    tomo.findCenters(row_bounds, center_rows, args.recon_center_low, args.recon_center_upp)
+    galaxy_param = {'row_bounds' : args.row_bounds, 'center_rows' : args.center_rows,
+            'center_type_selector' : args.center_type_selector, 'set_center' : args.set_center, 
+            'set_range' : args.set_range, 'set_step' : args.set_step, 
+            'recon_center_low' : args.recon_center_low, 'recon_center_upp' : args.recon_center_upp}
+    tomo.findCenters(galaxy_param)
 
 if __name__ == "__main__":
     __main__()

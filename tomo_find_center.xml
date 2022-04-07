@@ -1,48 +1,66 @@
 <tool id="tomo_find_center" name="Tomo Find Center Axis" version="0.1.0" python_template_version="3.9">
     <description>Find the center axis for a tomography reconstruction</description>
-    <requirements>
-        <requirement type="package" version="1.11.0">tomopy</requirement>
-        <requirement type="package" version="3.6.0">h5py</requirement>
-    </requirements>
+    <macros>
+        <import>tomo_macros.xml</import>
+    </macros>
+    <expand macro="requirements" />
     <command detect_errors="exit_code"><![CDATA[
         $__tool_directory__/tomo_find_center.py
         -i '$red_stacks'
         -c '$config'
-        --row_bounds '$row_bounds.row_bound_low $row_bounds.row_bound_upp'
-        --center_rows '$recon_centers.lower_row $recon_centers.upper_row'
+        --row_bounds $row_bounds.row_bound_low $row_bounds.row_bound_upp
+        --center_rows $recon_centers.lower_row $recon_centers.upper_row
+        #if str( $set.set_selector ) == "yes"
+            --center_type_selector '$set.center_type.center_type_selector'
+            #if str( $set.center_type.center_type_selector ) == "user"
+                --set_center '$set.center_type.set_center'
+            #endif
+            --set_range '$set.set_range'
+            --set_step '$set.set_step'
+        #endif
         --output_config 'output_config.yaml'
         --recon_center_low 'recon_center_low.png'
         --recon_center_upp 'recon_center_upp.png'
         -l '$log'
     ]]></command>
     <inputs>
-        <param name="red_stacks" type='data' format='npz' optional='false' label="Reduced stacks"/>
-        <param name="config" type='data' format='yaml' optional='false' label="Input config"/>
+        <expand macro="common_inputs"/>
+        <param name="red_stacks" type="data" format="npz" optional="false" label="Reduced stacks"/>
         <section name="row_bounds" title="Reconstruction row bounds">
             <param name="row_bound_low" type="integer" value="-1" label="Lower bound"/>
             <param name="row_bound_upp" type="integer" value="-1" label="Upper bound"/>
         </section>
         <section name="recon_centers" title="Reconstruction rows to establish center axis">
-            <param name="lower_row" type="integer" value="-1" label="Lower row"/>
-            <param name="upper_row" type="integer" value="-1" label="Upper row"/>
+            <param name="lower_row" type="integer" optional="false" label="Lower row"/>
+            <param name="upper_row" type="integer" optional="false" label="Upper row"/>
         </section>
+        <conditional name="set">
+            <param name="set_selector" type="select" label="Reconstruct slices for a set of center positions?">
+                <option value="no" selected="true">No</option>
+                <option value="yes">Yes</option>
+            </param>
+            <when value="yes">
+                <conditional name="center_type">
+                    <param name="center_type_selector" argument="--center_type_selector" type="select" label="Choose the center (C) of the set">
+                        <option value="vo" selected="true">Use the center obtained by Nghia Vo’s method</option>
+                        <option value="user">Enter the center of the set</option>
+                    </param>
+                    <when value="user">
+                        <param name="set_center" argument="--set_center" type="integer" value="0" label="Center (C) of the set (0: middle of the detector row)"/>
+                    </when>
+                </conditional>
+                <param name="set_range" argument="--set_range" type="float" value="20" label="Half-width (H) of the set ranch (in detector pixels)"/>
+                <param name="set_step" argument="--set_step" type="float" value="5" label="Step size (S) (in detector pixels, reconstruct slices for center at [C-H, C-H+S, ..., C+H])"/>
+            </when>
+        </conditional>
     </inputs>
     <outputs>
-        <data name="output_config" format="yaml" label="Output config" from_work_dir="output_config.yaml"/>
-        <data name="recon_center_low" format="png" label="Recontructed slice lower center" from_work_dir="recon_center_low.png"/>
-        <data name="recon_center_upp" format="png" label="Recontructed slice upper center" from_work_dir="recon_center_upp.png"/>
-        <data name="log" format="txt" label="Log"/>
+        <expand macro="common_outputs"/>
+        <data name="recon_center_low" format="png" label="Recontructed slice lower center using Nghia Vo’s method" from_work_dir="recon_center_low.png"/>
+        <data name="recon_center_upp" format="png" label="Recontructed slice upper center using Nghia Vo’s method" from_work_dir="recon_center_upp.png"/>
     </outputs>
     <help><![CDATA[
         Preprocess tomography images.
     ]]></help>
-    <citations>
-        <citation type="bibtex">
-@misc{githubsum_files,
-  author = {Verberg, Rolf},
-  year = {2022},
-  title = {Tomo Find Center Axis},
-}</citation>
-    </citations>
-
+    <expand macro="citations"/>
 </tool>
