@@ -1149,26 +1149,32 @@ class Tomo:
         logging.debug(f'filtering and removing ring artifact took {time()-t0:.2f} seconds!')
         return recon_clean
 
-    def _plotEdgesOnePlane(self, recon_plane, title, name=None, weight=0.001):
+    def _plotEdgesOnePlane(self, recon_plane, title, path=None, weight=0.001):
         # RV parameters for the denoise, gaussian, and ring removal will be different for different feature sizes
         edges = denoise_tv_chambolle(recon_plane, weight = weight)
         vmax = np.max(edges[0,:,:])
         vmin = -vmax
         if self.galaxy_flag:
-            msnc.quickImshow(edges[0,:,:], title, name=name, save_fig=True, save_only=True,
+            msnc.quickImshow(edges[0,:,:], title, path=path, save_fig=True, save_only=True,
                     cmap='gray', vmin=vmin, vmax=vmax)
         else:
-            msnc.quickImshow(edges[0,:,:], f'{title} coolwarm', path=self.output_folder,
+            if path is None:
+                path=self.output_folder
+            msnc.quickImshow(edges[0,:,:], f'{title} coolwarm', path=path,
                     save_fig=self.save_plots, save_only=self.save_plots_only, cmap='coolwarm')
-            msnc.quickImshow(edges[0,:,:], f'{title} gray', path=self.output_folder,
+            msnc.quickImshow(edges[0,:,:], f'{title} gray', path=path,
                     save_fig=self.save_plots, save_only=self.save_plots_only, cmap='gray',
                     vmin=vmin, vmax=vmax)
         del edges
 
     def _findCenterOnePlane(self, sinogram, row, thetas_deg, eff_pixel_size, cross_sectional_dim,
-            tol=0.1, num_core=1, recon_pngname=None, galaxy_param=None):
+            tol=0.1, num_core=1, galaxy_param=None):
         """Find center for a single tomography plane.
         """
+        if self.galaxy_flag:
+            assert(galaxy_param)
+            if not os.path.exists('find_center_pngs'):
+                os.mkdir('find_center_pngs')
         # sinogram index order: theta,column
         # need index order column,theta for iradon, so take transpose
         sinogram_T = sinogram.T
@@ -1183,23 +1189,19 @@ class Tomo:
             return float(center_offset_vo)
         elif self.galaxy_flag:
             logging.info(f'Center at row {row} using Nghia Vo’s method = {center_offset_vo:.2f}')
-            if recon_pngname:
-                assert(isinstance(recon_pngname, str))
-                recon_plane = self._reconstructOnePlane(sinogram_T, tomo_center, thetas_deg,
-                        eff_pixel_size, cross_sectional_dim, False, num_core)
-                title = os.path.basename(recon_pngname)
-                self._plotEdgesOnePlane(recon_plane, title, name=recon_pngname)
-                del recon_plane
-            if not galaxy_param or not galaxy_param['center_type_selector']:
+            recon_plane = self._reconstructOnePlane(sinogram_T, tomo_center, thetas_deg,
+                    eff_pixel_size, cross_sectional_dim, False, num_core)
+            title = f'edges row{row} center offset{center_offset_vo:.2f} Vo'
+            self._plotEdgesOnePlane(recon_plane, title, path='find_center_pngs')
+            del recon_plane
+            if not galaxy_param['center_type_selector']:
                 del sinogram_T
                 return float(center_offset_vo)
         else:
             print(f'Center at row {row} using Nghia Vo’s method = {center_offset_vo:.2f}')
-            if recon_pngname:
-                logging.warning('Ignoring recon_pngname in _findCenterOnePlane (only for Galaxy)')
             recon_plane = self._reconstructOnePlane(sinogram_T, tomo_center, thetas_deg,
                     eff_pixel_size, cross_sectional_dim, False, num_core)
-            title = f'edges row{row} center_offset_vo{center_offset_vo:.2f}'
+            title = f'edges row{row} center offset{center_offset_vo:.2f} Vo'
             self._plotEdgesOnePlane(recon_plane, title)
         if not self.galaxy_flag:
             if (pyip.inputYesNo('Try finding center using phase correlation '+
@@ -1216,7 +1218,7 @@ class Tomo:
                 print(f'Center at row {row} using phase correlation = {center_offset:.2f}')
                 recon_plane = self._reconstructOnePlane(sinogram_T, tomo_center, thetas_deg,
                         eff_pixel_size, cross_sectional_dim, False, num_core)
-                title = f'edges row{row} center_offset{center_offset:.2f}'
+                title = f'edges row{row} center_offset{center_offset:.2f} PC'
                 self._plotEdgesOnePlane(recon_plane, title)
             if (pyip.inputYesNo('Accept a center location ([y]) or continue '+
                     'search (n)? ', blank=True) != 'no'):
@@ -1266,7 +1268,10 @@ class Tomo:
                 recon_plane = self._reconstructOnePlane(sinogram_T, center_offset+center,
                         thetas_deg, eff_pixel_size, cross_sectional_dim, False, num_core)
                 title = f'edges row{row} center_offset{center_offset:.2f}'
-                self._plotEdgesOnePlane(recon_plane, title)
+                if self.galaxy_flag:
+                    self._plotEdgesOnePlane(recon_plane, title, path='find_center_pngs')
+                else:
+                    self._plotEdgesOnePlane(recon_plane, title)
             if self.galaxy_flag or pyip.inputInt('\nContinue (0) or end the search (1): ',
                     min=0, max=1):
                 break
@@ -1753,13 +1758,9 @@ class Tomo:
                 if self.save_plots_only:
                     msnc.clearFig(f'theta={theta_start}')
             # center_stack order: row,theta,column
-            if galaxy_param:
-                recon_pngname = galaxy_param['recon_center_low']
-            else:
-                recon_pngname = None
             center_offset = self._findCenterOnePlane(center_stack[row,:,:], row, thetas_deg,
                     eff_pixel_size, cross_sectional_dim, num_core=num_core,
-                    recon_pngname=recon_pngname, galaxy_param=galaxy_param)
+                    galaxy_param=galaxy_param)
         logging.info(f'lower_center_offset = {center_offset:.2f} {type(center_offset)}')
         print(center_offset)
 
@@ -1802,13 +1803,9 @@ class Tomo:
                 if self.save_plots_only:
                     msnc.clearFig(f'theta={theta_start}')
             # center_stack order: row,theta,column
-            if galaxy_param:
-                recon_pngname = galaxy_param['recon_center_upp']
-            else:
-                recon_pngname = None
             center_offset = self._findCenterOnePlane(center_stack[row,:,:], row, thetas_deg,
                     eff_pixel_size, cross_sectional_dim, num_core=num_core,
-                    recon_pngname=recon_pngname, galaxy_param=galaxy_param)
+                    galaxy_param=galaxy_param)
         logging.info(f'upper_center_offset = {center_offset:.2f}')
         del center_stack
 

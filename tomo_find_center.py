@@ -30,10 +30,6 @@ def __main__():
             type=float, help='Set step')
     parser.add_argument('--output_config',
             required=True, help='Output config')
-    parser.add_argument('--recon_center_low',
-            help='Lower reconstructed slice center image name')
-    parser.add_argument('--recon_center_upp',
-            help='Upper reconstructed slice center image name')
     parser.add_argument('-l', '--log', 
             type=argparse.FileType('w'), default=sys.stdout, help='Log file')
     args = parser.parse_args()
@@ -56,8 +52,6 @@ def __main__():
     logging.debug(f'set_range = {args.set_range}')
     logging.debug(f'set_step = {args.set_step}')
     logging.debug(f'output_config = {args.output_config}')
-    logging.debug(f'recon_center_low = {args.recon_center_low}')
-    logging.debug(f'recon_center_upp = {args.recon_center_upp}')
     logging.debug(f'log = {args.log}')
     logging.debug(f'is log stdout? {args.log is sys.stdout}')
 
@@ -74,8 +68,7 @@ def __main__():
     # Find centers
     galaxy_param = {'row_bounds' : args.row_bounds, 'center_rows' : args.center_rows,
             'center_type_selector' : args.center_type_selector, 'set_center' : args.set_center, 
-            'set_range' : args.set_range, 'set_step' : args.set_step, 
-            'recon_center_low' : args.recon_center_low, 'recon_center_upp' : args.recon_center_upp}
+            'set_range' : args.set_range, 'set_step' : args.set_step}
     tomo.findCenters(galaxy_param)
 
 if __name__ == "__main__":
