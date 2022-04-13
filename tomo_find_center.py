@@ -4,6 +4,7 @@ import logging
 
 import sys
 import argparse
+import tracemalloc
 
 from tomo import Tomo
 
@@ -33,6 +34,9 @@ def __main__():
     parser.add_argument('-l', '--log', 
             type=argparse.FileType('w'), default=sys.stdout, help='Log file')
     args = parser.parse_args()
+
+    # Starting memory monitoring
+    tracemalloc.start()
 
     # Set basic log configuration
     logging_format = '%(asctime)s : %(levelname)s - %(module)s : %(funcName)s - %(message)s'
@@ -70,6 +74,12 @@ def __main__():
             'center_type_selector' : args.center_type_selector, 'set_center' : args.set_center, 
             'set_range' : args.set_range, 'set_step' : args.set_step}
     tomo.findCenters(galaxy_param)
+
+    # Displaying memory usage
+    logging.info(f'Memory usage: {tracemalloc.get_traced_memory()}')
+
+    # stopping memory monitoring
+    tracemalloc.stop()
 
 if __name__ == "__main__":
     __main__()

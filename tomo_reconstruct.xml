@@ -8,6 +8,7 @@
         $__tool_directory__/tomo_reconstruct.py
         -i '$red_stacks'
         -c '$config'
+        --center_offsets $center_offsets.lower_center_offset $center_offsets.upper_center_offset
         --output_data 'output.npz'
         --output_config 'output_config.yaml'
         -l '$log'
@@ -15,6 +16,10 @@
     <inputs>
         <expand macro="common_inputs"/>
         <param name="red_stacks" type='data' format='npz' optional='false' label="Reduced stacks"/>
+        <section name="center_offsets" title="Reconstruction center axis offsets">
+            <param name="lower_center_offset" type="float" optional="false" label="Lower center offset"/>
+            <param name="upper_center_offset" type="float" optional="false" label="Upper center offset"/>
+        </section>
     </inputs>
     <outputs>
         <expand macro="common_outputs"/>

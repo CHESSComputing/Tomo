@@ -8,10 +8,13 @@ import re
 import yaml
 import argparse
 import numpy as np
+import tracemalloc
 
 from tomo import Tomo
 import msnc_tools as msnc
 
+#from memory_profiler import profile
+#@profile
 def __main__():
 
     # Parse command line arguments
@@ -42,6 +45,9 @@ def __main__():
             help='Log file')
     parser.add_argument('tomo_ranges', metavar='N', type=int, nargs='+')
     args = parser.parse_args()
+
+    # Starting memory monitoring
+    tracemalloc.start()
 
     # Set basic log configuration
     logging_format = '%(asctime)s : %(levelname)s - %(module)s : %(funcName)s - %(message)s'
@@ -155,10 +161,19 @@ def __main__():
         num_collections += 1
 
     # Preprocess the image files
-    tomo.genTomoStacks(tdf_files[0], tbf_files[0], tomo_stack_files, args.dark, args.bright,
-        args.tomo, args.detectorbounds, args.output_data)
+    galaxy_param = {'tdf_files' : tdf_files[0], 'tbf_files' : tbf_files[0],
+            'tomo_stack_files' : tomo_stack_files, 'dark_field_pngname' : args.dark,
+            'bright_field_pngname' : args.bright, 'tomo_field_pngname' : args.tomo,
+            'detectorbounds_pngname' : args.detectorbounds, 'output_name' : args.output_data}
+    tomo.genTomoStacks(galaxy_param)
     if not tomo.is_valid:
         IOError('Unable to load all required image files.')
+
+    # Displaying memory usage
+    logging.info(f'Memory usage: {tracemalloc.get_traced_memory()}')
+ 
+    # stopping memory monitoring
+    tracemalloc.stop()
 
 if __name__ == "__main__":
     __main__()

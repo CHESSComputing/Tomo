@@ -983,9 +983,11 @@ class Tomo:
         np.save(tomo_file, stack)
         logging.info(f'... done in {time()-t0:.2f} seconds!')
 
-    def _genTomo(self, tomo_stack_files, available_stacks):
+    def _genTomo(self, tomo_stack_files, available_stacks, num_core=None):
         """Generate tomography fields.
         """
+        if num_core is None:
+            num_core = self.num_core
         stacks = self.config['stack_info']['stacks']
         assert(len(self.tomo_stacks) == self.config['stack_info']['num'])
         assert(len(self.tomo_stacks) == len(stacks))
@@ -1445,11 +1447,11 @@ class Tomo:
                         f'{self.tomo_stacks[i].shape}')
         logging.info(f'... done in {time()-t0:.2f} seconds!')
 
-    def genTomoStacks(self, tdf_files=None, tbf_files=None, tomo_stack_files=None,
-            dark_field_pngname=None, bright_field_pngname=None, tomo_field_pngname=None,
-            detectorbounds_pngname=None, output_name=None):
+    def genTomoStacks(self, galaxy_param=None, num_core=None):
         """Preprocess tomography images.
         """
+        if num_core is None:
+            num_core = self.num_core
         # Try loading any already preprocessed stacks (skip in Galaxy)
         # preprocessed stack order for each one in stack: row,theta,column
         stack_info = self.config['stack_info']
@@ -1458,22 +1460,15 @@ class Tomo:
         assert(num_tomo_stacks == len(self.tomo_stacks))
         available_stacks = [False]*num_tomo_stacks
         if self.galaxy_flag:
-            assert(tdf_files is None or isinstance(tdf_files, list))
-            assert(isinstance(tbf_files, list))
-            assert(isinstance(tomo_stack_files, list))
+            assert(isinstance(galaxy_param, dict))
+            tdf_files = galaxy_param['tdf_files']
+            tbf_files = galaxy_param['tbf_files']
+            tomo_stack_files = galaxy_param['tomo_stack_files']
             assert(num_tomo_stacks == len(tomo_stack_files))
-            assert(isinstance(dark_field_pngname, str))
-            assert(isinstance(bright_field_pngname, str))
-            assert(isinstance(tomo_field_pngname, str))
-            assert(isinstance(detectorbounds_pngname, str))
-            assert(isinstance(output_name, str))
         else:
-            if tdf_files:
-                logging.warning('Ignoring tdf_files in genTomoStacks (only for Galaxy)')
-            if tbf_files:
-                logging.warning('Ignoring tbf_files in genTomoStacks (only for Galaxy)')
-            if tomo_stack_files:
-                logging.warning('Ignoring tomo_stack_files in genTomoStacks (only for Galaxy)')
+            if galaxy_param:
+                logging.warning('Ignoring galaxy_param in findCenters (only for Galaxy)')
+                galaxy_param = None
             tdf_files, tbf_files, tomo_stack_files = self.findImageFiles()
             if not self.is_valid:
                 return
@@ -1481,18 +1476,6 @@ class Tomo:
                 if not self.tomo_stacks[i].size and stack.get('preprocessed', False):
                     self.tomo_stacks[i], available_stacks[i] = \
                             self._loadTomo('red stack', stack['index'])
-            if dark_field_pngname:
-                logging.warning('Ignoring dark_field_pngname in genTomoStacks (only for Galaxy)')
-            if bright_field_pngname:
-                logging.warning('Ignoring bright_field_pngname in genTomoStacks (only for Galaxy)')
-            if tomo_field_pngname:
-                logging.warning('Ignoring tomo_field_pngname in genTomoStacks (only for Galaxy)')
-            if detectorbounds_pngname:
-                logging.warning('Ignoring detectorbounds_pngname in genTomoStacks '+
-                    '(only used in Galaxy)')
-            if output_name:
-                logging.warning('Ignoring output_name in genTomoStacks '+
-                    '(only used in Galaxy)')
 
         # Preprocess any unloaded stacks
         if False in available_stacks:
@@ -1506,23 +1489,25 @@ class Tomo:
 
             # Generate dark field
             if tdf_files:
-                self._genDark(tdf_files, dark_field_pngname)
+                self._genDark(tdf_files, galaxy_param['dark_field_pngname'])
 
             # Generate bright field
-            self._genBright(tbf_files, bright_field_pngname)
+            self._genBright(tbf_files, galaxy_param['bright_field_pngname'])
 
             # Set vertical detector bounds for image stack
-            self._setDetectorBounds(tomo_stack_files, tomo_field_pngname, detectorbounds_pngname)
+            self._setDetectorBounds(tomo_stack_files, galaxy_param['tomo_field_pngname'],
+                    galaxy_param['detectorbounds_pngname'])
 
             # Set zoom and/or theta skip to reduce memory the requirement
             self._setZoomOrSkip()
 
             # Generate tomography fields
-            self._genTomo(tomo_stack_files, available_stacks)
+            self._genTomo(tomo_stack_files, available_stacks, num_core)
 
             # Save tomography stack to file
             if self.galaxy_flag:
                 t0 = time()
+                output_name = galaxy_param['output_name']
                 logging.info(f'Saving preprocessed tomography stack to {output_name} ...')
                 save_stacks = {f'set_{stack["index"]}':tomo_stack
                         for stack,tomo_stack in zip(stacks,self.tomo_stacks)}
@@ -1889,7 +1874,7 @@ class Tomo:
         # Update config file
         self.config = msnc.update('config.txt', 'check_centers', True, 'find_centers')
 
-    def reconstructTomoStacks(self, output_name=None, num_core=None):
+    def reconstructTomoStacks(self, galaxy_param=None, num_core=None):
         """Reconstruct tomography stacks.
         """
         if num_core is None:
@@ -1900,11 +1885,20 @@ class Tomo:
         assert(len(self.tomo_stacks) == len(stacks))
         assert(len(self.tomo_recon_stacks) == len(stacks))
         if self.galaxy_flag:
-            assert(isinstance(output_name, str))
+            assert(isinstance(galaxy_param, dict))
+            # Get rotation axis centers
+            center_offsets = galaxy_param['center_offsets']
+            assert(isinstance(center_offsets, list) and len(center_offsets) == 2)
+            lower_center_offset = center_offsets[0]
+            assert(msnc.is_num(lower_center_offset))
+            upper_center_offset = center_offsets[1]
+            assert(msnc.is_num(upper_center_offset))
         else:
-            if output_name:
-                logging.warning('Ignoring output_name in reconstructTomoStacks '+
-                    '(only used in Galaxy)')
+            if galaxy_param:
+                logging.warning('Ignoring galaxy_param in reconstructTomoStacks (only for Galaxy)')
+                galaxy_param = None
+            lower_center_offset = None
+            upper_center_offset = None
 
         # Get rotation axis rows and centers
         find_center = self.config['find_center']
@@ -1912,20 +1906,22 @@ class Tomo:
         if lower_row is None:
             logging.error('Unable to read lower_row from config')
             return
-        lower_center_offset = find_center.get('lower_center_offset')
-        if lower_center_offset is None:
-            logging.error('Unable to read lower_center_offset from config')
-            return
         upper_row = find_center.get('upper_row')
         if upper_row is None:
             logging.error('Unable to read upper_row from config')
             return
-        upper_center_offset = find_center.get('upper_center_offset')
-        if upper_center_offset is None:
-            logging.error('Unable to read upper_center_offset from config')
-            return
         logging.debug(f'lower_row = {lower_row} upper_row = {upper_row}')
         assert(lower_row < upper_row)
+        if lower_center_offset is None:
+            lower_center_offset = find_center.get('lower_center_offset')
+            if lower_center_offset is None:
+                logging.error('Unable to read lower_center_offset from config')
+                return
+        if upper_center_offset is None:
+            upper_center_offset = find_center.get('upper_center_offset')
+            if upper_center_offset is None:
+                logging.error('Unable to read upper_center_offset from config')
+                return
         center_slope = (upper_center_offset-lower_center_offset)/(upper_row-lower_row)
 
         # Set thetas (in radians)
@@ -2004,6 +2000,7 @@ class Tomo:
         # Save reconstructed tomography stack to file
         if self.galaxy_flag:
             t0 = time()
+            output_name = galaxy_param['output_name']
             logging.info(f'Saving reconstructed tomography stack to {output_name} ...')
             save_stacks = {f'set_{stack["index"]}':tomo_stack
                     for stack,tomo_stack in zip(stacks,self.tomo_recon_stacks)}

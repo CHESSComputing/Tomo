@@ -45,11 +45,11 @@
                         <option value="user">Enter the center of the set</option>
                     </param>
                     <when value="user">
-                        <param name="set_center" argument="--set_center" type="integer" value="0" label="Center (C) of the set (0: middle of the detector row)"/>
+                        <param name="set_center" argument="--set_center" type="integer" value="0" label="Center (C) of the set in detector pixels (0: center of the detector row)"/>
                     </when>
                 </conditional>
-                <param name="set_range" argument="--set_range" type="float" value="20" label="Half-width (H) of the set ranch (in detector pixels)"/>
-                <param name="set_step" argument="--set_step" type="float" value="5" label="Step size (S) (in detector pixels, reconstruct slices for center at [C-H, C-H+S, ..., C+H])"/>
+                <param name="set_range" argument="--set_range" type="float" value="20" label="Half-width (H) of the set ranch in detector pixels"/>
+                <param name="set_step" argument="--set_step" type="float" value="5" label="Step size (S) in detector pixels (reconstruct slices for centers at [C-H, C-H+S, ..., C+H])"/>
             </when>
         </conditional>
     </inputs>

@@ -4,6 +4,7 @@ import logging
 
 import sys
 import argparse
+import tracemalloc
 
 from tomo import Tomo
 
@@ -16,6 +17,8 @@ def __main__():
             help='Preprocessed image file stacks')
     parser.add_argument('-c', '--config',
             help='Input config')
+    parser.add_argument('--center_offsets',
+            required=True, nargs=2, type=float, help='Reconstruction center axis offsets')
     parser.add_argument('--output_config',
             help='Output config')
     parser.add_argument('--output_data',
@@ -25,6 +28,9 @@ def __main__():
             default=sys.stdout,
             help='Log file')
     args = parser.parse_args()
+
+    # Starting memory monitoring
+    tracemalloc.start()
 
     # Set basic log configuration
     logging_format = '%(asctime)s : %(levelname)s - %(module)s : %(funcName)s - %(message)s'
@@ -37,6 +43,7 @@ def __main__():
 
     logging.debug(f'input_stacks = {args.input_stacks}')
     logging.debug(f'config = {args.config}')
+    logging.debug(f'center_offsets = {args.center_offsets} {type(args.center_offsets)}')
     logging.debug(f'output_config = {args.output_config}')
     logging.debug(f'output_data = {args.output_data}')
     logging.debug(f'log = {args.log}')
@@ -53,7 +60,14 @@ def __main__():
     tomo.loadTomoStacks(args.input_stacks)
 
     # Reconstruct tomography stacks
-    tomo.reconstructTomoStacks(args.output_data)
+    galaxy_param = {'center_offsets' : args.center_offsets, 'output_name' : args.output_data}
+    tomo.reconstructTomoStacks(galaxy_param)
+
+    # Displaying memory usage
+    logging.info(f'Memory usage: {tracemalloc.get_traced_memory()}')
+
+    # stopping memory monitoring
+    tracemalloc.stop()
 
 if __name__ == "__main__":
     __main__()
