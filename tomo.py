@@ -836,6 +836,7 @@ class Tomo:
                 tmp_max = tmp.max()
                 tmp[img_x_bounds[0],:] = tmp_max
                 tmp[img_x_bounds[1]-1,:] = tmp_max
+                title = f'tomography image at theta={self.config["theta_range"]["start"]}'
                 msnc.quickImshow(tmp, title=title)
                 del tmp
                 x_sum_min = x_sum.min()
@@ -870,7 +871,7 @@ class Tomo:
                 tmp_max = tmp.max()
                 tmp[img_x_bounds[0],:] = tmp_max
                 tmp[img_x_bounds[1]-1,:] = tmp_max
-                title = 'Bright field'
+                title = 'bright field'
                 msnc.quickImshow(tmp, title=title)
                 del tmp
                 msnc.quickPlot((range(x_sum.size), x_sum),
@@ -904,7 +905,7 @@ class Tomo:
                     tmp_max = tmp.max()
                     tmp[x_low,:] = tmp_max
                     tmp[x_upp-1,:] = tmp_max
-                    title = 'Bright field'
+                    title = 'bright field'
                     msnc.quickImshow(tmp, title=title)
                     del tmp
                     msnc.quickPlot((range(x_sum.size), x_sum),
@@ -940,9 +941,14 @@ class Tomo:
                     tomo_stack[img_x_bounds[0],:] = tomo_stack_max
                     tomo_stack[img_x_bounds[1]-1,:] = tomo_stack_max
                 title = f'tomography image at theta={self.config["theta_range"]["start"]}'
-                msnc.quickImshow(tomo_stack, title=title, path='setup_pngs',
-                        name=f'tomo_{stack["index"]}.png', save_fig=self.save_plots, save_only=True,
-                        show_grid=True)
+                if self.galaxy_flag:
+                    msnc.quickImshow(tomo_stack, title=title, path='setup_pngs',
+                            name=f'tomo_{stack["index"]}.png', save_fig=True, save_only=True,
+                            show_grid=True)
+                else:
+                    msnc.quickImshow(tomo_stack, title=title, path=self.output_folder,
+                            name=f'tomo_{stack["index"]}.png', save_fig=self.save_plots,
+                            save_only=True, show_grid=True)
                 del tomo_stack
         logging.debug(f'img_x_bounds: {img_x_bounds}')
 

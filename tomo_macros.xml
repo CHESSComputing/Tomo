@@ -3,6 +3,7 @@
         <requirements>
             <requirement type="package" version="1.11.0">tomopy</requirement>
             <requirement type="package" version="3.6.0">h5py</requirement>
+            <requirement type="package" version="1.0.3">lmfit</requirement>
         </requirements>
     </xml>
     <xml name="citations">
