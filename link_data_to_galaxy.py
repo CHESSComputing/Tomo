@@ -5,9 +5,7 @@ import logging
 import os
 import sys
 import pwd
-import h5py
 import argparse
-from ast import literal_eval
 from bioblend.galaxy import GalaxyInstance
 
 from tomo import Tomo
@@ -88,7 +86,7 @@ if __name__ == '__main__':
     config = tomo.cf.config
 
     # Find all available image files
-    dark_files, bright_files, tomo_files = tomo.findImageFiles()
+    dark_files, bright_files, tomo_files = tomo.findImageFiles(tiff_to_h5_flag = True)
     if not tomo.is_valid:
         raise ValueError('Unable to find available image files')
 

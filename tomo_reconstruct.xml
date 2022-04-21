@@ -1,15 +1,16 @@
-<tool id="tomo_reconstruct" name="Tomo Reconstruction" version="0.1.0" python_template_version="3.9">
+<tool id="tomo_reconstruct" name="Tomo Reconstruction" version="0.1.1" python_template_version="3.9">
     <description>Perform a tomography reconstruction</description>
     <macros>
         <import>tomo_macros.xml</import>
     </macros>
     <expand macro="requirements" />
     <command detect_errors="exit_code"><![CDATA[
+        mkdir center_slice_pngs;
         $__tool_directory__/tomo_reconstruct.py
         -i '$red_stacks'
         -c '$config'
         --center_offsets $center_offsets.lower_center_offset $center_offsets.upper_center_offset
-        --output_data 'output.npz'
+        --output_data 'output_data.npz'
         --output_config 'output_config.yaml'
         -l '$log'
     ]]></command>
@@ -17,13 +18,17 @@
         <expand macro="common_inputs"/>
         <param name="red_stacks" type='data' format='npz' optional='false' label="Reduced stacks"/>
         <section name="center_offsets" title="Reconstruction center axis offsets">
-            <param name="lower_center_offset" type="float" optional="false" label="Lower center offset"/>
-            <param name="upper_center_offset" type="float" optional="false" label="Upper center offset"/>
+            <param name="lower_center_offset" type="float" value = "0" optional="false" label="Lower center offset"/>
+            <param name="upper_center_offset" type="float" value = "0" optional="false" label="Upper center offset"/>
         </section>
     </inputs>
     <outputs>
         <expand macro="common_outputs"/>
         <data name="output_data" format="npz" label="Reconstructed tomography stacks" from_work_dir="output_data.npz"/>
+        <collection name="recon_slices" type="list" label="Recontructed slices midway in each dimension">
+            <discover_datasets pattern="__name_and_ext__" directory="center_slice_pngs"/>
+        </collection>
+        <data name="output_config" format="yaml" label="Output config reconstruction" from_work_dir="output_config.yaml"/>
     </outputs>
     <help><![CDATA[
         Reconstruct tomography images.

@@ -1,20 +1,17 @@
-<tool id="tomo_setup" name="Tomo Setup" version="0.1.1" python_template_version="3.9">
+<tool id="tomo_setup" name="Tomo Setup" version="0.1.2" python_template_version="3.9">
     <description>Preprocess tomography images</description>
     <macros>
         <import>tomo_macros.xml</import>
     </macros>
     <expand macro="requirements" />
     <command detect_errors="exit_code"><![CDATA[
+        mkdir setup_pngs;
         cp '$inputfiles' inputfiles.txt &&
         $__tool_directory__/tomo_setup.py
         -i inputfiles.txt
         -c '$config'
         --theta_range '$thetas.theta_start $thetas.theta_end $thetas.num_thetas'
-        --dark 'dark_field.png'
-        --bright 'bright_field.png'
-        --tomo 'tomo.png'
-        --detectorbounds 'detectorbounds.png'
-        --output_data 'output.npz'
+        --output_data 'output_data.npz'
         --output_config 'output_config.yaml'
         -l '$log'
 #for $s in $tomo_sets# ${s.offset} ${s.num} #end for
@@ -44,10 +41,10 @@
     <outputs>
         <expand macro="common_outputs"/>
         <data name="inputfiles" format="txt" label="Input files" from_work_dir="inputfiles.txt" hidden="true"/>
-        <data name="dark_field" format="png" label="Dark field" from_work_dir="dark_field.png"/>
-        <data name="bright_field" format="png" label="Bright field" from_work_dir="bright_field.png"/>
-        <data name="tomo" format="png" label="First tomography image" from_work_dir="tomo.png"/>
-        <data name="detectorbounds" format="png" label="Detector bounds" from_work_dir="detectorbounds.png"/>
+        <collection name="setup_pngs" type="list" label="Tomo setup images">
+            <discover_datasets pattern="__name_and_ext__" directory="setup_pngs"/>
+        </collection>
+        <data name="output_config" format="yaml" label="Output config setup" from_work_dir="output_config.yaml"/>
         <data name="output_data" format="npz" label="Preprocessed tomography data" from_work_dir="output_data.npz"/>
     </outputs>
     <help><![CDATA[

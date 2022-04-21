@@ -266,6 +266,7 @@ def loadImageStack(files, filetype, img_offset, num_imgs, num_img_skip=0,
             illegal_value('files[0]', files[0], 'loadImageStack')
             return img_stack
         t0 = time()
+        logging.info(f'Loading {files[0]}')
         with h5py.File(files[0], 'r') as f:
             shape = f['entry/instrument/detector/data'].shape
             if len(shape) != 3:
@@ -289,6 +290,13 @@ def loadImageStack(files, filetype, img_offset, num_imgs, num_img_skip=0,
     else:
         illegal_value('filetype', filetype, 'findImageRange')
     return img_stack
+
+def combine_tiffs_in_h5(files, num_imgs, h5_filename):
+    img_stack = loadImageStack(files, 'tif', 0, num_imgs)
+    with h5py.File(h5_filename, 'w') as f:
+        f.create_dataset('entry/instrument/detector/data', data=img_stack)
+    del img_stack
+    return [h5_filename]
 
 def clearFig(title):
     if not isinstance(title, str):
@@ -337,6 +345,8 @@ def quickImshow(a, title=None, path=None, name=None, save_fig=False, save_only=F
         if show_grid:
             ax = plt.gca()
             ax.grid(color=grid_color, linewidth=grid_linewidth)
+        if title != 'quick_imshow':
+            plt.title = title
         plt.savefig(path)
         plt.close(fig=title)
         #plt.imsave(f'{title}.png', a, **kwargs)
@@ -347,6 +357,8 @@ def quickImshow(a, title=None, path=None, name=None, save_fig=False, save_only=F
         if show_grid:
             ax = plt.gca()
             ax.grid(color=grid_color, linewidth=grid_linewidth)
+        if title != 'quick_imshow':
+            plt.title = title
         if save_fig:
             plt.savefig(path)
         plt.pause(1)
@@ -394,6 +406,8 @@ def quickPlot(*args, title=None, path=None, name=None, save_fig=False, save_only
         if show_grid:
             ax = plt.gca()
             ax.grid(color='k')#, linewidth=1)
+        if title != 'quick_plot':
+            plt.title = title
         plt.savefig(path)
         plt.close(fig=title)
     else:
@@ -407,6 +421,8 @@ def quickPlot(*args, title=None, path=None, name=None, save_fig=False, save_only
         if show_grid:
             ax = plt.gca()
             ax.grid(color='k')#, linewidth=1)
+        if title != 'quick_plot':
+            plt.title = title
         if save_fig:
             plt.savefig(path)
         plt.pause(1)
@@ -588,7 +604,7 @@ def fitStep(x=None, y=None, model='step', form='arctan'):
         mod = RectangleModel(form=form)
     pars = mod.guess(y, x=x)
     out  = mod.fit(y, pars, x=x)
-    #print(out.fit_report())
+    #print(f'fit_report:\n{out.fit_report()}')
     #quickPlot((x,y),(x,out.best_fit))
     return out.best_values
 

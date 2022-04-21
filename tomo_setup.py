@@ -27,14 +27,6 @@ def __main__():
             help='Input config')
     parser.add_argument('--theta_range',
             help='Theta range (lower bound, upper bound, number of angles)')
-    parser.add_argument('--dark',
-            help='Dark field')
-    parser.add_argument('--bright',
-            help='Bright field')
-    parser.add_argument('--tomo',
-            help='First tomography image')
-    parser.add_argument('--detectorbounds',
-            help='Detector bounds')
     parser.add_argument('--output_config',
             help='Output config')
     parser.add_argument('--output_data',
@@ -60,10 +52,6 @@ def __main__():
 
     logging.debug(f'config = {args.config}')
     logging.debug(f'theta_range = {args.theta_range.split()}')
-    logging.debug(f'dark = {args.dark}')
-    logging.debug(f'bright = {args.bright}')
-    logging.debug(f'tomo = {args.tomo}')
-    logging.debug(f'detectorbounds = {args.detectorbounds}')
     logging.debug(f'output_config = {args.output_config}')
     logging.debug(f'output_data = {args.output_data}')
     logging.debug(f'log = {args.log}')
@@ -162,9 +150,7 @@ def __main__():
 
     # Preprocess the image files
     galaxy_param = {'tdf_files' : tdf_files[0], 'tbf_files' : tbf_files[0],
-            'tomo_stack_files' : tomo_stack_files, 'dark_field_pngname' : args.dark,
-            'bright_field_pngname' : args.bright, 'tomo_field_pngname' : args.tomo,
-            'detectorbounds_pngname' : args.detectorbounds, 'output_name' : args.output_data}
+            'tomo_stack_files' : tomo_stack_files, 'output_name' : args.output_data}
     tomo.genTomoStacks(galaxy_param)
     if not tomo.is_valid:
         IOError('Unable to load all required image files.')

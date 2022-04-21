@@ -1,4 +1,4 @@
-<tool id="tomo_find_center" name="Tomo Find Center Axis" version="0.1.1" python_template_version="3.9">
+<tool id="tomo_find_center" name="Tomo Find Center Axis" version="0.1.2" python_template_version="3.9">
     <description>Find the center axis for a tomography reconstruction</description>
     <macros>
         <import>tomo_macros.xml</import>
@@ -30,8 +30,8 @@
             <param name="row_bound_upp" type="integer" value="-1" label="Upper bound"/>
         </section>
         <section name="recon_centers" title="Reconstruction rows to establish center axis">
-            <param name="lower_row" type="integer" optional="true" label="Lower row"/>
-            <param name="upper_row" type="integer" optional="true" label="Upper row"/>
+            <param name="lower_row" type="integer" value="-1" label="Lower row"/>
+            <param name="upper_row" type="integer" value="-1" label="Upper row"/>
         </section>
         <conditional name="set">
             <param name="set_selector" type="select" label="Reconstruct slices for a set of center positions?">
@@ -58,6 +58,7 @@
         <collection name="recon_center_set" type="list" label="Recontructed slices at various centers">
             <discover_datasets pattern="__name_and_ext__" directory="find_center_pngs"/>
         </collection>
+        <data name="output_config" format="yaml" label="Output config find center" from_work_dir="output_config.yaml"/>
     </outputs>
     <help><![CDATA[
         Find the center axis for a tomography reconstruction.
