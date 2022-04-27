@@ -25,7 +25,7 @@
     <outputs>
         <expand macro="common_outputs"/>
         <data name="output_data" format="npz" label="Reconstructed tomography stacks" from_work_dir="output_data.npz"/>
-        <collection name="recon_slices" type="list" label="Recontructed slices midway in each dimension">
+        <collection name="center_slice_pngs" type="list" label="Recontructed slices midway in each dimension">
             <discover_datasets pattern="__name_and_ext__" directory="center_slice_pngs"/>
         </collection>
         <data name="output_config" format="yaml" label="Output config reconstruction" from_work_dir="output_config.yaml"/>

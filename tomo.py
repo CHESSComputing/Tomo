@@ -1564,7 +1564,7 @@ class Tomo:
 
         return dark_files, bright_files, tomo_stack_files
 
-    def loadTomoStacks(self, input_name):
+    def loadTomoStacks(self, input_name, recon_flag=False):
         """Load tomography stacks (only for Galaxy).
         """
         assert(self.galaxy_flag)
@@ -1574,10 +1574,16 @@ class Tomo:
         stacks = stack_info.get('stacks')
         assert(len(self.tomo_stacks) == stack_info['num'])
         with np.load(input_name) as f:
-            for i,stack in enumerate(stacks):
-                self.tomo_stacks[i] = f[f'set_{stack["index"]}']
-                logging.info(f'loaded stack {i}: index = {stack["index"]}, shape = '+
-                        f'{self.tomo_stacks[i].shape}')
+            if recon_flag:
+                for i,stack in enumerate(stacks):
+                    self.tomo_recon_stacks[i] = f[f'set_{stack["index"]}']
+                    logging.info(f'loaded stack {i}: index = {stack["index"]}, shape = '+
+                            f'{self.tomo_recon_stacks[i].shape}')
+            else:
+                for i,stack in enumerate(stacks):
+                    self.tomo_stacks[i] = f[f'set_{stack["index"]}']
+                    logging.info(f'loaded stack {i}: index = {stack["index"]}, shape = '+
+                            f'{self.tomo_stacks[i].shape}')
         logging.info(f'... done in {time()-t0:.2f} seconds!')
 
     def genTomoStacks(self, galaxy_param=None, num_core=None):
@@ -2192,23 +2198,41 @@ class Tomo:
                 tomosum = np.concatenate([tomosum]+
                         [np.sum(self.tomo_recon_stacks[i][row_bounds[0]:row_bounds[1],:,:],
                         axis=(1,2)) for i in range(1, num_tomo_stacks-1)])
-                print(f'tomosum.shape = {tomosum.shape}')
             if num_tomo_stacks > 1:
                 tomosum = np.concatenate([tomosum,
                     np.sum(self.tomo_recon_stacks[num_tomo_stacks-1][row_bounds[0]:,:,:],
                     axis=(1,2))])
-                print(f'tomosum.shape = {tomosum.shape}')
             msnc.quickPlot(tomosum, title='recon stack sum xy', path='center_slice_pngs',
                 save_fig=True, save_only=True)
 
-    def combineTomoStacks(self):
+    def combineTomoStacks(self, galaxy_param=None):
         """Combine the reconstructed tomography stacks.
         """
         # stack order: stack,row(z),x,y
+        if self.galaxy_flag:
+            assert(galaxy_param)
+            if not os.path.exists('combine_pngs'):
+                os.mkdir('combine_pngs')
         logging.debug('Combine reconstructed tomography stacks')
-        # Load any unloaded reconstructed stacks
         stack_info = self.config['stack_info']
         stacks = stack_info['stacks']
+        assert(len(self.tomo_recon_stacks) == stack_info['num'])
+        assert(len(self.tomo_recon_stacks) == len(stacks))
+        if self.galaxy_flag:
+            assert(isinstance(galaxy_param, dict))
+            # Get image bounds
+            x_bounds = galaxy_param['x_bounds']
+            assert(isinstance(x_bounds, list) and len(x_bounds) == 2)
+            y_bounds = galaxy_param['y_bounds']
+            assert(isinstance(y_bounds, list) and len(y_bounds) == 2)
+            z_bounds = galaxy_param['z_bounds']
+            assert(isinstance(z_bounds, list) and len(z_bounds) == 2)
+        else:
+            if galaxy_param:
+                logging.warning('Ignoring galaxy_param in reconstructTomoStacks (only for Galaxy)')
+                galaxy_param = None
+
+        # Load any unloaded reconstructed stacks
         for i,stack in enumerate(stacks):
             available = False
             if not self.tomo_recon_stacks[i].size and stack.get('reconstructed', False):
@@ -2236,69 +2260,97 @@ class Tomo:
         [tomosum := tomosum+np.sum(tomo_recon_stack, axis=(0,2)) for tomo_recon_stack in
                 self.tomo_recon_stacks]
         combine_stacks = self.config.get('combine_stacks')
-        if combine_stacks and 'x_bounds' in combine_stacks:
-            x_bounds = combine_stacks['x_bounds']
-            if not msnc.is_index_range(x_bounds, 0, self.tomo_recon_stacks[0].shape[1]):
-                msnc.illegal_value('x_bounds', x_bounds, 'config file')
-            elif not self.test_mode:
-                msnc.quickPlot(tomosum, title='recon stack sum yz')
-                if pyip.inputYesNo('\nCurrent image x-bounds: '+
-                        f'[{x_bounds[0]}, {x_bounds[1]}], use these values ([y]/n)? ',
-                        blank=True) == 'no':
-                    if pyip.inputYesNo(
-                            'Do you want to change the image x-bounds ([y]/n)? ',
-                            blank=True) == 'no':
-                        x_bounds = [0, self.tomo_recon_stacks[0].shape[1]]
-                    else:
-                        x_bounds = msnc.selectArrayBounds(tomosum, title='recon stack sum yz')
+        if self.galaxy_flag:
+            if x_bounds[0] == -1:
+                x_bounds[0] = 0
+            if x_bounds[1] == -1:
+                x_bounds[1] = tomosum.size
+            if not msnc.is_index_range(x_bounds, 0, tomosum.size):
+                msnc.illegal_value('x_bounds', x_bounds, 'galaxy input')
+            tomosum_min = tomosum.min()
+            tomosum_max = tomosum.max()
+            msnc.quickPlot((range(tomosum.size), tomosum),
+                    ([x_bounds[0], x_bounds[0]], [tomosum_min, tomosum_max], 'r-'),
+                    ([x_bounds[1]-1, x_bounds[1]-1], [tomosum_min, tomosum_max], 'r-'),
+                    title=f'recon stack sum yz', path='combine_pngs', save_fig=True, save_only=True)
         else:
-            msnc.quickPlot(tomosum, title='recon stack sum yz')
-            if pyip.inputYesNo('\nDo you want to change the image x-bounds (y/n)? ') == 'no':
-                x_bounds = [0, self.tomo_recon_stacks[0].shape[1]]
+            if combine_stacks and 'x_bounds' in combine_stacks:
+                x_bounds = combine_stacks['x_bounds']
+                if not msnc.is_index_range(x_bounds, 0, tomosum.size):
+                    msnc.illegal_value('x_bounds', x_bounds, 'config file')
+                elif not self.test_mode:
+                    msnc.quickPlot(tomosum, title='recon stack sum yz')
+                    if pyip.inputYesNo('\nCurrent image x-bounds: '+
+                            f'[{x_bounds[0]}, {x_bounds[1]}], use these values ([y]/n)? ',
+                            blank=True) == 'no':
+                        if pyip.inputYesNo(
+                                'Do you want to change the image x-bounds ([y]/n)? ',
+                                blank=True) == 'no':
+                            x_bounds = [0, tomosum.size]
+                        else:
+                            x_bounds = msnc.selectArrayBounds(tomosum, title='recon stack sum yz')
             else:
-                x_bounds = msnc.selectArrayBounds(tomosum, title='recon stack sum yz')
-        if False and self.test_mode:
-            np.savetxt(f'{self.output_folder}/recon_stack_sum_yz.txt',
-                    tomosum[x_bounds[0]:x_bounds[1]], fmt='%.6e')
-        if self.save_plots_only:
-            msnc.clearFig('recon stack sum yz')
+                msnc.quickPlot(tomosum, title='recon stack sum yz')
+                if pyip.inputYesNo('\nDo you want to change the image x-bounds (y/n)? ') == 'no':
+                    x_bounds = [0, tomosum.size]
+                else:
+                    x_bounds = msnc.selectArrayBounds(tomosum, title='recon stack sum yz')
+            if False and self.test_mode:
+                np.savetxt(f'{self.output_folder}/recon_stack_sum_yz.txt',
+                        tomosum[x_bounds[0]:x_bounds[1]], fmt='%.6e')
+            if self.save_plots_only:
+                msnc.clearFig('recon stack sum yz')
 
         # Selecting y bounds (in xz-plane)
         tomosum = 0
         #RV FIX :=
         [tomosum := tomosum+np.sum(tomo_recon_stack, axis=(0,1)) for tomo_recon_stack in
                 self.tomo_recon_stacks]
-        if combine_stacks and 'y_bounds' in combine_stacks:
-            y_bounds = combine_stacks['y_bounds']
-            if not msnc.is_index_range(y_bounds, 0, self.tomo_recon_stacks[0].shape[1]):
-                msnc.illegal_value('y_bounds', y_bounds, 'config file')
-            elif not self.test_mode:
-                msnc.quickPlot(tomosum, title='recon stack sum xz')
-                if pyip.inputYesNo('\nCurrent image y-bounds: '+
-                        f'[{y_bounds[0]}, {y_bounds[1]}], use these values ([y]/n)? ',
-                        blank=True) == 'no':
-                    if pyip.inputYesNo(
-                            'Do you want to change the image y-bounds ([y]/n)? ',
-                            blank=True) == 'no':
-                        y_bounds = [0, self.tomo_recon_stacks[0].shape[1]]
-                    else:
-                        y_bounds = msnc.selectArrayBounds(tomosum, title='recon stack sum yz')
+        if self.galaxy_flag:
+            if y_bounds[0] == -1:
+                y_bounds[0] = 0
+            if y_bounds[1] == -1:
+                y_bounds[1] = tomosum.size
+            if not msnc.is_index_range(y_bounds, 0, tomosum.size):
+                msnc.illegal_value('y_bounds', y_bounds, 'galaxy input')
+            tomosum_min = tomosum.min()
+            tomosum_max = tomosum.max()
+            msnc.quickPlot((range(tomosum.size), tomosum),
+                    ([y_bounds[0], y_bounds[0]], [tomosum_min, tomosum_max], 'r-'),
+                    ([y_bounds[1]-1, y_bounds[1]-1], [tomosum_min, tomosum_max], 'r-'),
+                    title=f'recon stack sum xz', path='combine_pngs', save_fig=True, save_only=True)
         else:
-            msnc.quickPlot(tomosum, title='recon stack sum xz')
-            if pyip.inputYesNo('\nDo you want to change the image y-bounds (y/n)? ') == 'no':
-                y_bounds = [0, self.tomo_recon_stacks[0].shape[1]]
+            if combine_stacks and 'y_bounds' in combine_stacks:
+                y_bounds = combine_stacks['y_bounds']
+                if not msnc.is_index_range(y_bounds, 0, tomosum.size):
+                    msnc.illegal_value('y_bounds', y_bounds, 'config file')
+                elif not self.test_mode:
+                    msnc.quickPlot(tomosum, title='recon stack sum xz')
+                    if pyip.inputYesNo('\nCurrent image y-bounds: '+
+                            f'[{y_bounds[0]}, {y_bounds[1]}], use these values ([y]/n)? ',
+                            blank=True) == 'no':
+                        if pyip.inputYesNo(
+                                'Do you want to change the image y-bounds ([y]/n)? ',
+                                blank=True) == 'no':
+                            y_bounds = [0, tomosum.size]
+                        else:
+                            y_bounds = msnc.selectArrayBounds(tomosum, title='recon stack sum yz')
             else:
-                y_bounds = msnc.selectArrayBounds(tomosum, title='recon stack sum xz')
-        if False and self.test_mode:
-            np.savetxt(f'{self.output_folder}/recon_stack_sum_xz.txt',
-                    tomosum[y_bounds[0]:y_bounds[1]], fmt='%.6e')
-        if self.save_plots_only:
-            msnc.clearFig('recon stack sum xz')
+                msnc.quickPlot(tomosum, title='recon stack sum xz')
+                if pyip.inputYesNo('\nDo you want to change the image y-bounds (y/n)? ') == 'no':
+                    y_bounds = [0, tomosum.size]
+                else:
+                    y_bounds = msnc.selectArrayBounds(tomosum, title='recon stack sum xz')
+            if False and self.test_mode:
+                np.savetxt(f'{self.output_folder}/recon_stack_sum_xz.txt',
+                        tomosum[y_bounds[0]:y_bounds[1]], fmt='%.6e')
+            if self.save_plots_only:
+                msnc.clearFig('recon stack sum xz')
 
         # Combine reconstructed tomography stacks
         logging.info(f'Combining reconstructed stacks ...')
         t0 = time()
-        num_tomo_stacks = stack_info['num']
+        num_tomo_stacks = len(stacks)
         if num_tomo_stacks == 1:
             low_bound = row_bounds[0]
         else:
@@ -2333,7 +2385,7 @@ class Tomo:
                 np.savetxt(f'{self.output_folder}/recon_combined_sum_xy.txt',
                         tomosum, fmt='%.6e')
             np.savetxt(f'{self.output_folder}/recon_combined.txt',
-                    tomo_recon_combined[int(tomo_recon_combined.shape[0]/2),:,:], fmt='%.6e')
+                    tomo_recon_combined[int(tomosum.size/2),:,:], fmt='%.6e')
 
             # Update config and save to file
             if combine_stacks:
@@ -2347,37 +2399,63 @@ class Tomo:
             return
 
         # Selecting z bounds (in xy-plane)
-        msnc.quickPlot(tomosum, title='recon combined sum xy')
-        if pyip.inputYesNo(
-                '\nDo you want to change the image z-bounds (y/[n])? ',
-                blank=True) != 'yes':
-            z_bounds = [0, tomo_recon_combined.shape[0]]
+        if self.galaxy_flag:
+            if z_bounds[0] == -1:
+                z_bounds[0] = 0
+            if z_bounds[1] == -1:
+                z_bounds[1] = tomosum.size
+            if not msnc.is_index_range(z_bounds, 0, tomosum.size):
+                msnc.illegal_value('z_bounds', z_bounds, 'galaxy input')
+            tomosum_min = tomosum.min()
+            tomosum_max = tomosum.max()
+            msnc.quickPlot((range(tomosum.size), tomosum),
+                    ([z_bounds[0], z_bounds[0]], [tomosum_min, tomosum_max], 'r-'),
+                    ([z_bounds[1]-1, z_bounds[1]-1], [tomosum_min, tomosum_max], 'r-'),
+                    title=f'recon stack sum xy', path='combine_pngs', save_fig=True, save_only=True)
         else:
-            z_bounds = msnc.selectArrayBounds(tomosum, title='recon combined sum xy')
-        if z_bounds[0] != 0 or z_bounds[1] != tomo_recon_combined.shape[0]:
+            msnc.quickPlot(tomosum, title='recon combined sum xy')
+            if pyip.inputYesNo(
+                    '\nDo you want to change the image z-bounds (y/[n])? ',
+                    blank=True) != 'yes':
+                z_bounds = [0, tomosum.size]
+            else:
+                z_bounds = msnc.selectArrayBounds(tomosum, title='recon combined sum xy')
+            if self.save_plots_only:
+                msnc.clearFig('recon combined sum xy')
+        if z_bounds[0] != 0 or z_bounds[1] != tomosum.size:
             tomo_recon_combined = tomo_recon_combined[z_bounds[0]:z_bounds[1],:,:]
-        if self.save_plots_only:
-            msnc.clearFig('recon combined sum xy')
 
         # Plot center slices
+        if self.galaxy_flag:
+            path = 'combine_pngs'
+            save_fig = True
+            save_only = True
+        else:
+            path = self.output_folder
+            save_fig = self.save_plots
+            save_only = self.save_plots_only
         msnc.quickImshow(tomo_recon_combined[int(tomo_recon_combined.shape[0]/2),:,:],
                 title=f'recon combined xslice{int(tomo_recon_combined.shape[0]/2)}',
-                path=self.output_folder, save_fig=self.save_plots,
-                save_only=self.save_plots_only)
+                path=path, save_fig=save_fig, save_only=save_only)
         msnc.quickImshow(tomo_recon_combined[:,int(tomo_recon_combined.shape[1]/2),:],
                 title=f'recon combined yslice{int(tomo_recon_combined.shape[1]/2)}',
-                path=self.output_folder, save_fig=self.save_plots,
-                save_only=self.save_plots_only)
+                path=path, save_fig=save_fig, save_only=save_only)
         msnc.quickImshow(tomo_recon_combined[:,:,int(tomo_recon_combined.shape[2]/2)],
                 title=f'recon combined zslice{int(tomo_recon_combined.shape[2]/2)}',
-                path=self.output_folder, save_fig=self.save_plots,
-                save_only=self.save_plots_only)
+                path=path, save_fig=save_fig, save_only=save_only)
 
-        # Save combined reconstructed tomo stacks
-        base_name = 'recon combined'
-        for stack in stacks:
-            base_name += f' {stack["index"]}'
-        self._saveTomo(base_name, tomo_recon_combined)
+        # Save combined reconstructed tomography stack to file
+        if self.galaxy_flag:
+            t0 = time()
+            output_name = galaxy_param['output_name']
+            logging.info(f'Saving combined reconstructed tomography stack to {output_name} ...')
+            np.save(output_name, tomo_recon_combined)
+            logging.info(f'... done in {time()-t0:.2f} seconds!')
+        else:
+            base_name = 'recon combined'
+            for stack in stacks:
+                base_name += f' {stack["index"]}'
+            self._saveTomo(base_name, tomo_recon_combined)
 
         # Update config and save to file
         if combine_stacks:

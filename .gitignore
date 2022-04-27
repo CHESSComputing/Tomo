@@ -1,8 +1,15 @@
-/config.txt
 /*.png
 /*.npy
+/*.npz
+/*.txt
+/config*.*
+/inputfiles*.*
+/output.*
 .spyproject
 __pycache__
 backup
 tests/test1/output/actual/**
 tests/test2/output/actual/**
+/test_*
+/run_*
+!config_start.txt

@@ -1,0 +1,47 @@
+<tool id="tomo_combine" name="Tomo Combine Reconstructed Stacks" version="0.1.0" python_template_version="3.9">
+    <description>Combine reconstructed tomography stacks</description>
+    <macros>
+        <import>tomo_macros.xml</import>
+    </macros>
+    <expand macro="requirements" />
+    <command detect_errors="exit_code"><![CDATA[
+        mkdir combine_pngs;
+        $__tool_directory__/tomo_combine.py
+        -i '$recon_stacks'
+        -c '$config'
+        --x_bounds $x_bounds.low $x_bounds.upp
+        --y_bounds $y_bounds.low $y_bounds.upp
+        --z_bounds $z_bounds.low $z_bounds.upp
+        --output_data 'output_data.npy'
+        --output_config 'output_config.yaml'
+        -l '$log'
+    ]]></command>
+    <inputs>
+        <expand macro="common_inputs"/>
+        <param name="recon_stacks" type='data' format='npz' optional='false' label="Reconstructed stacks"/>
+        <section name="x_bounds" title="Reconstructed range in x direction">
+            <param name="low" type="integer" value = "-1" label="Lower x-bound"/>
+            <param name="upp" type="integer" value = "-1" label="Upper x-bound"/>
+        </section>
+        <section name="y_bounds" title="Reconstructed range in y direction">
+            <param name="low" type="integer" value = "-1" label="Lower y-bound"/>
+            <param name="upp" type="integer" value = "-1" label="Upper y-bound"/>
+        </section>
+        <section name="z_bounds" title="Reconstructed range in z direction">
+            <param name="low" type="integer" value = "-1" label="Lower z-bound"/>
+            <param name="upp" type="integer" value = "-1" label="Upper z-bound"/>
+        </section>
+    </inputs>
+    <outputs>
+        <expand macro="common_outputs"/>
+        <data name="output_data" format="npy" label="Combined tomography stacks" from_work_dir="output_data.npy"/>
+        <collection name="combine_pngs" type="list" label="Recontructed slices midway in each combined dimension">
+            <discover_datasets pattern="__name_and_ext__" directory="combine_pngs"/>
+        </collection>
+        <data name="output_config" format="yaml" label="Output config reconstruction" from_work_dir="output_config.yaml"/>
+    </outputs>
+    <help><![CDATA[
+        Combine reconstructed tomography images.
+    ]]></help>
+    <expand macro="citations"/>
+</tool>
