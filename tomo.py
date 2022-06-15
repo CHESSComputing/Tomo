@@ -436,7 +436,7 @@ class Tomo:
             else:
                 raise OSError(f'Invalid config_out input {config_out} {type(config_out)}')
         if not os.path.isdir(output_folder):
-            raise OSError(f'Invalid output_folder input {output_folder} {type(output_folder)}')
+            os.mkdir(os.path.abspath(output_folder))
         if isinstance(log_stream, str):
             path = os.path.split(log_stream)[0]
             if path and not os.path.isdir(path):
@@ -763,11 +763,13 @@ class Tomo:
             x_low = 0
             x_upp = x_sum.size
             if num_x_min is not None:
-                fit = msnc.fitStep(y=x_sum, model='rectangle', form='atan')
-                x_low = fit.get('center1', None)
-                x_upp = fit.get('center2', None)
-                sig_low = fit.get('sigma1', None)
-                sig_upp = fit.get('sigma2', None)
+                fit = msnc.Fit.fitData(np.array(range(len(x_sum))), x_sum, models='rectangle',
+                        form='atan', guess=True)
+                parameters = fit.best_values
+                x_low = parameters.get('center1', None)
+                x_upp = parameters.get('center2', None)
+                sig_low = parameters.get('sigma1', None)
+                sig_upp = parameters.get('sigma2', None)
                 if (x_low is not None and x_upp is not None and sig_low is not None and
                         sig_upp is not None and 0 <= x_low < x_upp <= x_sum.size and
                         (sig_low+sig_upp)/(x_upp-x_low) < 0.1):
@@ -849,9 +851,9 @@ class Tomo:
                         f'upper bound = {img_x_bounds[1]} (exclusive)]')
                 use_bounds =  pyip.inputYesNo('Accept these bounds ([y]/n)?: ', blank=True)
             if use_bounds == 'no':
-                img_x_bounds = msnc.selectImageBounds(tomo_stack[0,:,:], 0,
+                img_x_bounds = list(msnc.selectImageBounds(tomo_stack[0,:,:], 0,
                         img_x_bounds[0], img_x_bounds[1], num_x_min,
-                        f'tomography image at theta={self.config["theta_range"]["start"]}')
+                        f'tomography image at theta={self.config["theta_range"]["start"]}'))
                 if num_x_min is not None and img_x_bounds[1]-img_x_bounds[0]+1 < num_x_min:
                     logging.warning('Image bounds and pixel size prevent seamless stacking')
                 title = f'tomography image at theta={self.config["theta_range"]["start"]}'
@@ -883,11 +885,13 @@ class Tomo:
                 use_bounds =  pyip.inputYesNo('Accept these bounds ([y]/n)?: ', blank=True)
             if use_bounds == 'no':
                 use_fit = 'no'
-                fit = msnc.fitStep(y=x_sum, model='rectangle', form='atan')
-                x_low = fit.get('center1', None)
-                x_upp = fit.get('center2', None)
-                sig_low = fit.get('sigma1', None)
-                sig_upp = fit.get('sigma2', None)
+                fit = msnc.Fit.fitData(np.array(range(len(x_sum))), x_sum, models='rectangle',
+                        form='atan', guess=True)
+                parameters = fit.best_values
+                x_low = parameters.get('center1', None)
+                x_upp = parameters.get('center2', None)
+                sig_low = parameters.get('sigma1', None)
+                sig_upp = parameters.get('sigma2', None)
                 if (x_low is not None and x_upp is not None and sig_low is not None and
                         sig_upp is not None and 0 <= x_low < x_upp <= x_sum.size and
                         (sig_low+sig_upp)/(x_upp-x_low) < 0.1):
@@ -916,8 +920,8 @@ class Tomo:
                     print(f'upper bound = {x_upp} (exclusive)]')
                     use_fit =  pyip.inputYesNo('Accept these bounds ([y]/n)?: ', blank=True)
                 if use_fit == 'no':
-                    img_x_bounds = msnc.selectArrayBounds(x_sum, img_x_bounds[0], img_x_bounds[1],
-                            num_x_min, 'sum over theta and y')
+                    img_x_bounds = list(msnc.selectArrayBounds(x_sum, img_x_bounds[0],
+                            img_x_bounds[1], num_x_min, 'sum over theta and y'))
                 else:
                     img_x_bounds = [x_low, x_upp]
                 if num_x_min is not None and img_x_bounds[1]-img_x_bounds[0]+1 < num_x_min:
@@ -953,10 +957,10 @@ class Tomo:
         logging.debug(f'img_x_bounds: {img_x_bounds}')
 
         if self.save_plots_only:
-            msnc.clearFig('bright field')
-            msnc.clearFig('sum over theta and y')
+            msnc.clearImshow('bright field')
+            msnc.clearImshow('sum over theta and y')
             if title:
-                msnc.clearFig(title)
+                msnc.clearImshow(title)
 
         # Update config and save to file
         if preprocess is None:
@@ -1822,7 +1826,7 @@ class Tomo:
                      del a_tmp
                      accept = pyip.inputYesNo('Accept these bounds ([y]/n)?: ', blank=True)
              if accept == 'no':
-                 (n1, n2) = msnc.selectImageBounds(center_stack[:,0,:], 0,
+                 n1, n2 = msnc.selectImageBounds(center_stack[:,0,:], 0,
                          title=f'center stack theta={theta_start}')
              else:
                  n1 = row_bounds[0]
@@ -1872,7 +1876,7 @@ class Tomo:
                 use_row = pyip.inputYesNo('\nCurrent row index for lower center = '
                         f'{row}, use this value ([y]/n)? ', blank=True)
                 if self.save_plots_only:
-                    msnc.clearFig(f'theta={theta_start}')
+                    msnc.clearImshow(f'theta={theta_start}')
                 if use_row != 'no':
                     center_offset = find_center.get('lower_center_offset')
                     if msnc.is_num(center_offset):
@@ -1888,7 +1892,7 @@ class Tomo:
                 if row == '':
                     row = n1
                 if self.save_plots_only:
-                    msnc.clearFig(f'theta={theta_start}')
+                    msnc.clearImshow(f'theta={theta_start}')
             # center_stack order: row,theta,column
             center_offset = self._findCenterOnePlane(center_stack[row,:,:], row, thetas_deg,
                     eff_pixel_size, cross_sectional_dim, num_core=num_core,
@@ -1916,7 +1920,7 @@ class Tomo:
                 use_row = pyip.inputYesNo('\nCurrent row index for upper center = '
                         f'{row}, use this value ([y]/n)? ', blank=True)
                 if self.save_plots_only:
-                    msnc.clearFig(f'theta={theta_start}')
+                    msnc.clearImshow(f'theta={theta_start}')
                 if use_row != 'no':
                     center_offset = find_center.get('upper_center_offset')
                     if msnc.is_num(center_offset):
@@ -1932,7 +1936,7 @@ class Tomo:
                 if row == '':
                     row = n2-1
                 if self.save_plots_only:
-                    msnc.clearFig(f'theta={theta_start}')
+                    msnc.clearImshow(f'theta={theta_start}')
             # center_stack order: row,theta,column
             center_offset = self._findCenterOnePlane(center_stack[row,:,:], row, thetas_deg,
                     eff_pixel_size, cross_sectional_dim, num_core=num_core,
@@ -2288,18 +2292,19 @@ class Tomo:
                                 blank=True) == 'no':
                             x_bounds = [0, tomosum.size]
                         else:
-                            x_bounds = msnc.selectArrayBounds(tomosum, title='recon stack sum yz')
+                            x_bounds = list(msnc.selectArrayBounds(tomosum,
+                                    title='recon stack sum yz'))
             else:
                 msnc.quickPlot(tomosum, title='recon stack sum yz')
                 if pyip.inputYesNo('\nDo you want to change the image x-bounds (y/n)? ') == 'no':
                     x_bounds = [0, tomosum.size]
                 else:
-                    x_bounds = msnc.selectArrayBounds(tomosum, title='recon stack sum yz')
+                    x_bounds = list(msnc.selectArrayBounds(tomosum, title='recon stack sum yz'))
             if False and self.test_mode:
                 np.savetxt(f'{self.output_folder}/recon_stack_sum_yz.txt',
                         tomosum[x_bounds[0]:x_bounds[1]], fmt='%.6e')
             if self.save_plots_only:
-                msnc.clearFig('recon stack sum yz')
+                msnc.clearPlot('recon stack sum yz')
 
         # Selecting y bounds (in xz-plane)
         tomosum = 0
@@ -2334,18 +2339,19 @@ class Tomo:
                                 blank=True) == 'no':
                             y_bounds = [0, tomosum.size]
                         else:
-                            y_bounds = msnc.selectArrayBounds(tomosum, title='recon stack sum yz')
+                            y_bounds = list(msnc.selectArrayBounds(tomosum,
+                                    title='recon stack sum yz'))
             else:
                 msnc.quickPlot(tomosum, title='recon stack sum xz')
                 if pyip.inputYesNo('\nDo you want to change the image y-bounds (y/n)? ') == 'no':
                     y_bounds = [0, tomosum.size]
                 else:
-                    y_bounds = msnc.selectArrayBounds(tomosum, title='recon stack sum xz')
+                    y_bounds = list(msnc.selectArrayBounds(tomosum, title='recon stack sum xz'))
             if False and self.test_mode:
                 np.savetxt(f'{self.output_folder}/recon_stack_sum_xz.txt',
                         tomosum[y_bounds[0]:y_bounds[1]], fmt='%.6e')
             if self.save_plots_only:
-                msnc.clearFig('recon stack sum xz')
+                msnc.clearPlot('recon stack sum xz')
 
         # Combine reconstructed tomography stacks
         logging.info(f'Combining reconstructed stacks ...')
@@ -2419,9 +2425,9 @@ class Tomo:
                     blank=True) != 'yes':
                 z_bounds = [0, tomosum.size]
             else:
-                z_bounds = msnc.selectArrayBounds(tomosum, title='recon combined sum xy')
+                z_bounds = list(msnc.selectArrayBounds(tomosum, title='recon combined sum xy'))
             if self.save_plots_only:
-                msnc.clearFig('recon combined sum xy')
+                msnc.clearPlot('recon combined sum xy')
         if z_bounds[0] != 0 or z_bounds[1] != tomosum.size:
             tomo_recon_combined = tomo_recon_combined[z_bounds[0]:z_bounds[1],:,:]
 

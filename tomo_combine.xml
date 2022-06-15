@@ -38,7 +38,7 @@
         <collection name="combine_pngs" type="list" label="Recontructed slices midway in each combined dimension">
             <discover_datasets pattern="__name_and_ext__" directory="combine_pngs"/>
         </collection>
-        <data name="output_config" format="yaml" label="Output config reconstruction" from_work_dir="output_config.yaml"/>
+        <data name="output_config" format="yaml" label="Output config combine reconstruction" from_work_dir="output_config.yaml"/>
     </outputs>
     <help><![CDATA[
         Combine reconstructed tomography images.
