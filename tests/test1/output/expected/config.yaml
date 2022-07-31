@@ -42,6 +42,11 @@ preprocess:
   - 950
   num_theta_skip: 0
   zoom_perc: 100
+recon_parameters:
+  gaussian_sigma: 0.5
+  ring_width: 10
+  secondary_iters: 25
+  stripe_fw_sigma: 0.1
 stack_info:
   num: 1
   stacks:
@@ -57,4 +62,6 @@ theta_range:
   end: 180.0
   num: 354
   start: 0.0
+vis_parameters:
+  denoise_weight: 0.01
 work_folder: /nfs/chess/scratch/user/rv43/2022-1/id3b/sobhani-3249-A
