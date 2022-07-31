@@ -28,7 +28,7 @@ detector:
   rows: 1436
 find_center:
   center_stack_index: 1
-  completed: true
+  completed: false
   lower_center_offset: -49.75
   lower_row: 50
   row_bounds:
@@ -42,6 +42,11 @@ preprocess:
   - 950
   num_theta_skip: 0
   zoom_perc: 100
+recon_parameters:
+  gaussian_sigma: 0.5
+  ring_width: 10
+  secondary_iters: 25
+  stripe_fw_sigma: 0.1
 stack_info:
   num: 1
   stacks:
@@ -50,11 +55,13 @@ stack_info:
     img_start: 1
     index: 1
     num: 354
-    preprocessed: true
-    reconstructed: true
+    preprocessed: false
+    reconstructed: false
     ref_height: 0.0
 theta_range:
   end: 180.0
   num: 354
   start: 0.0
+vis_parameters:
+  denoise_weight: 0.01
 work_folder: /nfs/chess/scratch/user/rv43/2022-1/id3b/sobhani-3249-A

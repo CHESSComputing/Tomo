@@ -1,6 +1,7 @@
 /*.png
 /*.npy
 /*.npz
+/*.h5
 /*.txt
 /config*.*
 /inputfiles*.*

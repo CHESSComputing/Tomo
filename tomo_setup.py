@@ -11,7 +11,6 @@ import numpy as np
 import tracemalloc
 
 from tomo import Tomo
-import msnc_tools as msnc
 
 #from memory_profiler import profile
 #@profile

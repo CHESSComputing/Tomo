@@ -1,0 +1,20 @@
+<tool id="read_image" name="Read Reconstructed Image" version="0.1.0" python_template_version="3.9">
+    <description>Read reconstructed image</description>
+    <macros>
+        <import>tomo_macros.xml</import>
+    </macros>
+    <command detect_errors="exit_code"><![CDATA[
+        $__tool_directory__/read_image.py
+        -i '$recon_image'
+        -l '$log'
+    ]]></command>
+    <inputs>
+        <param name="recon_image" type='data' format='npz' optional='false' label="Reconstructed image"/>
+    </inputs>
+    <outputs>
+    </outputs>
+    <help><![CDATA[
+        Read reconstructed tomography image.
+    ]]></help>
+    <expand macro="citations"/>
+</tool>
