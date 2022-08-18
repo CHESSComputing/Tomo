@@ -1,4 +1,4 @@
-<tool id="tomo_reconstruct" name="Tomo Reconstruction" version="0.1.1" python_template_version="3.9">
+<tool id="tomo_reconstruct" name="Tomo Reconstruction" version="0.2.0" python_template_version="3.9">
     <description>Perform a tomography reconstruction</description>
     <macros>
         <import>tomo_macros.xml</import>

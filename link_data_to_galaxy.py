@@ -9,7 +9,6 @@ import argparse
 from bioblend.galaxy import GalaxyInstance
 
 from tomo import Tomo
-import msnc_tools as msnc
 
 def get_folder_id(gi, path):
     library_id = None
@@ -86,6 +85,7 @@ if __name__ == '__main__':
     config = tomo.cf.config
 
     # Find all available image files
+    #dark_files, bright_files, tomo_files = tomo.findImageFiles(tiff_to_h5_flag = False)
     dark_files, bright_files, tomo_files = tomo.findImageFiles(tiff_to_h5_flag = True)
     if not tomo.is_valid:
         raise ValueError('Unable to find available image files')

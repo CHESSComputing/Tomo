@@ -1,4 +1,4 @@
-<tool id="tomo_combine" name="Tomo Combine Reconstructed Stacks" version="0.1.0" python_template_version="3.9">
+<tool id="tomo_combine" name="Tomo Combine Reconstructed Stacks" version="0.2.0" python_template_version="3.9">
     <description>Combine reconstructed tomography stacks</description>
     <macros>
         <import>tomo_macros.xml</import>

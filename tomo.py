@@ -39,13 +39,12 @@ try:
 except:
     pass
 
-from detector import TomoDetectorConfig
-from fit import Fit
-#from msnctools.general import illegal_value, is_int, is_num, is_index_range, get_trailing_int, \
-from general import illegal_value, is_int, is_num, is_index_range, get_trailing_int, \
+from msnctools.detector import TomoDetectorConfig
+from msnctools.fit import Fit
+from msnctools.general import illegal_value, is_int, is_num, is_index_range, get_trailing_int, \
         input_int, input_num, input_yesno, input_menu, findImageFiles, loadImageStack, clearPlot, \
         draw_mask_1d, quickPlot, clearImshow, quickImshow, combine_tiffs_in_h5, Config
-from general import selectImageRange, selectImageBounds
+from msnctools.general import selectImageRange, selectImageBounds
 
 # the following tomopy routines don't run with more than 24 cores on Galaxy-Dev
 #   - tomopy.find_center_vo

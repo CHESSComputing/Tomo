@@ -17,7 +17,10 @@
         </citations>
     </xml>
     <xml name="common_inputs">
+        <!--
         <param name="config" type='data' format='yaml' optional='false' label="Input config"/>
+        -->
+        <param name="config" type='data' format='tomo.config.yaml' optional='true' label="Input config"/>
     </xml>
     <xml name="common_outputs">
         <data name="log" format="txt" label="Log"/>

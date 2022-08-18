@@ -1,4 +1,4 @@
-<tool id="tomo_find_center" name="Tomo Find Center Axis" version="0.1.2" python_template_version="3.9">
+<tool id="tomo_find_center" name="Tomo Find Center Axis" version="0.2.0" python_template_version="3.9">
     <description>Find the center axis for a tomography reconstruction</description>
     <macros>
         <import>tomo_macros.xml</import>
@@ -38,12 +38,14 @@
                 <option value="no" selected="true">No</option>
                 <option value="yes">Yes</option>
             </param>
+            <when value="no"/>
             <when value="yes">
                 <conditional name="center_type">
                     <param name="center_type_selector" argument="--center_type_selector" type="select" label="Choose the center (C) of the set">
                         <option value="vo" selected="true">Use the center obtained by Nghia Vo’s method</option>
                         <option value="user">Enter the center of the set</option>
                     </param>
+                    <when value="vo"/>
                     <when value="user">
                         <param name="set_center" argument="--set_center" type="integer" value="0" label="Center (C) of the set in detector pixels (0: center of the detector row)"/>
                     </when>
