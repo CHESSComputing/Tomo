@@ -3,13 +3,13 @@ channels:
   - astra-toolbox
   - conda-forge
   - defaults
-#  - file:///nfs/chess/user/rv43/miniconda3/envs/build_msnctools/conda-bld
+  - file:///nfs/chess/sw/miniconda3_msnc/envs/build_msnctools/conda-bld
 dependencies:
   - astra-toolbox==2.0.0
   - pip==21.3.1
-  - python==3.9.5
+  - python==3.9.13
   - matplotlib==3.5.2
-#  - msnctools==2022.2.1
+  - msnctools=2022.2.2=2022.2.2
   - tomopy==1.11.0
   - pip:
     - h5py==3.6.0

@@ -510,7 +510,7 @@ class Tomo:
             self.is_valid =  self.cf.validate()
 
             # Load detector info file
-            df = TomoDetectorConfig(self.cf.config['detector']['id'])
+            df = TomoDetectorConfig(f'{self.cf.config["detector"]["id"]}.yaml')
 
             # Check detector info file parameters
             if df.valid:
