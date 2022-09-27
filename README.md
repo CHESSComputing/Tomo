@@ -15,9 +15,9 @@
         depending on your conda installation, it may be necessary to use the alternative:
         source activate tomopy
 
- * then start notebook server
+ * then use commandline and run 
 
-         jupyter notebook
+         python tomo.py
 
  * when finished, deactivate the environment
 
