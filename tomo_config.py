@@ -447,6 +447,7 @@ class TomoField(SpecScans):
     img_start: conint(ge=0) = 0
     img_offset: conint(ge=0) = 0
     num: conint(ge=0) = 0
+    ref_height: float = 0
 
     @validator('data_path')
     @classmethod
@@ -563,6 +564,8 @@ class TomoField(SpecScans):
         self.scan_numbers_cli()
         self.data_path = f'{self.spec_file}_{detector_id.upper()}_{self.scan_numbers[0]:03d}.h5'
         self.theta_range_cli(attr_desc)
+        parser = self.get_scanparser(self.scan_numbers[0])
+        self.ref_height = parser.get_vertical_shift()
 
 
 class Setup(BaseModel):
