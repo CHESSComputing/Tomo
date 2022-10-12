@@ -9,9 +9,13 @@ dependencies:
   - pip==21.3.1
   - python==3.9.13
   - matplotlib==3.5.2
-  - msnctools=2022.2.2=2022.2.2
+  - msnctools=2022.2.*
+  - nexusformat=0.7.7
+  - pydantic==1.10.2
   - tomopy==1.11.0
+  - xarray==2022.6.0
   - pip:
     - h5py==3.6.0
-  - jupyter==1.0.0 # Not strictly necessary, just provided for users' convenience.
+  - jupyterlab==3.4.7
+#  - jupyter==1.0.0 # Not strictly necessary, just provided for users' convenience.
   - spyder==5.2.2  # Not strictly necessary, just provided for users' convenience.
