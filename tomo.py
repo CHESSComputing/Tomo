@@ -97,7 +97,7 @@ class ConfigTomo(Config):
 
         # Check number of tomography image stacks
         self.num_tomo_stacks = self.config.get('num_tomo_stacks', 1)
-        if not is_int(self.num_tomo_stacks, 1):
+        if not is_int(self.num_tomo_stacks, gt=0):
             self.num_tomo_stacks = None
             illegal_value(self.num_tomo_stacks, 'num_tomo_stacks', 'config file')
             return False
@@ -126,17 +126,17 @@ class ConfigTomo(Config):
 
         # Check tomo angle (theta) range
         self.start_theta = self.config.get('start_theta', 0.)
-        if not is_num(self.start_theta, 0.):
+        if not is_num(self.start_theta, ge=0.):
             illegal_value(self.start_theta, 'start_theta', 'config file')
             is_valid = False
         logging.debug(f'start_theta = {self.start_theta}')
         self.end_theta = self.config.get('end_theta', 180.)
-        if not is_num(self.end_theta, self.start_theta):
+        if not is_num(self.end_theta, ge=self.start_theta):
             illegal_value(self.end_theta, 'end_theta', 'config file')
             is_valid = False
         logging.debug(f'end_theta = {self.end_theta}')
         self.num_thetas = self.config.get('num_thetas')
-        if not (self.num_thetas is None or is_int(self.num_thetas, 1)):
+        if not (self.num_thetas is None or is_int(self.num_thetas, gt=0)):
             illegal_value(self.num_thetas, 'num_thetas', 'config file')
             self.num_thetas = None
             is_valid = False
@@ -166,7 +166,7 @@ class ConfigTomo(Config):
         # Check number of tomography image stacks
         stack_info = self.config['stack_info']
         self.num_tomo_stacks = stack_info.get('num', 1)
-        if not is_int(self.num_tomo_stacks, 1):
+        if not is_int(self.num_tomo_stacks, gt=0):
             self.num_tomo_stacks = None
             illegal_value(self.num_tomo_stacks, 'num_tomo_stacks', 'config file')
             return False
@@ -193,17 +193,17 @@ class ConfigTomo(Config):
             self.num_thetas = None
         else:
             self.start_theta = theta_range.get('start', 0.)
-            if not is_num(self.start_theta, 0.):
+            if not is_num(self.start_theta, ge=0.):
                 illegal_value(self.start_theta, 'theta_range:start', 'config file')
                 is_valid = False
             logging.debug(f'start_theta = {self.start_theta}')
             self.end_theta = theta_range.get('end', 180.)
-            if not is_num(self.end_theta, self.start_theta):
+            if not is_num(self.end_theta, ge=self.start_theta):
                 illegal_value(self.end_theta, 'theta_range:end', 'config file')
                 is_valid = False
             logging.debug(f'end_theta = {self.end_theta}')
             self.num_thetas = theta_range.get('num')
-            if self.num_thetas and not is_int(self.num_thetas, 1):
+            if self.num_thetas and not is_int(self.num_thetas, gt=0):
                 illegal_value(self.num_thetas, 'theta_range:num', 'config file')
                 self.num_thetas = None
                 is_valid = False
@@ -572,8 +572,8 @@ class Tomo:
         # Check number of tomography angles/thetas
         num_thetas = self.config['theta_range'].get('num')
         if num_thetas is None:
-            num_thetas = input_int('\nEnter the number of thetas', 1)
-        elif not is_int(num_thetas, 0):
+            num_thetas = input_int('\nEnter the number of thetas', default=1)
+        elif not is_int(num_thetas, gt=0):
             illegal_value(num_thetas, 'num_thetas', 'config file')
             self.is_valid = False
             return
@@ -661,7 +661,7 @@ class Tomo:
         # Remove dark field intensities above the cutoff
         tdf_cutoff = dark_field.get('cutoff')
         if tdf_cutoff is not None:
-            if not is_num(tdf_cutoff, 0):
+            if not is_num(tdf_cutoff, ge=0):
                 logging.warning(f'Ignoring illegal value of tdf_cutoff {tdf_cutoff}')
             else:
                 self.tdf[self.tdf > tdf_cutoff] = np.nan
@@ -993,10 +993,10 @@ class Tomo:
         if not self.galaxy_flag:
             if preprocess is None or 'zoom_perc' not in preprocess:
                 if input_yesno('\nDo you want to zoom in to reduce memory requirement (y/n)?', 'n'):
-                    zoom_perc = input_int('    Enter zoom percentage', 1, 100)
+                    zoom_perc = input_int('    Enter zoom percentage', ge=1, le=100)
             else:
                 zoom_perc = preprocess['zoom_perc']
-                if is_num(zoom_perc, 1., 100.):
+                if is_num(zoom_perc, ge=1., le=100.):
                     zoom_perc = int(zoom_perc)
                 else:
                     illegal_value(zoom_perc, 'preprocess:zoom_perc', 'config file')
@@ -1006,11 +1006,11 @@ class Tomo:
             if preprocess is None or 'num_theta_skip' not in preprocess:
                 if input_yesno('Do you want to skip thetas to reduce memory requirement (y/n)?',
                         'n'):
-                    num_theta_skip = input_int('    Enter the number skip theta interval', 0,
-                            self.num_thetas-1)
+                    num_theta_skip = input_int('    Enter the number skip theta interval', ge=0,
+                            lt=self.num_thetas)
             else:
                 num_theta_skip = preprocess['num_theta_skip']
-                if not is_int(num_theta_skip, 0):
+                if not is_int(num_theta_skip, ge=0):
                     illegal_value(num_theta_skip, 'preprocess:num_theta_skip', 'config file')
                     num_theta_skip = 0
         logging.debug(f'zoom_perc = {zoom_perc}')
@@ -1247,12 +1247,12 @@ class Tomo:
             ring_width = 15
         else:
             sigma = recon_parameters.get('gaussian_sigma', 1.0)
-            if not is_num(sigma, 0.0):
+            if not is_num(sigma, ge=0.0):
                 logging.warning(f'Illegal gaussian_sigma ({sigma}) in _reconstructOnePlane, '+
                         'set to a default value of 1.0')
                 sigma = 1.0
             ring_width = recon_parameters.get('ring_width', 15)
-            if not is_int(ring_width, 0):
+            if not is_int(ring_width, ge=0):
                 logging.warning(f'Illegal ring_width ({ring_width}) in _reconstructOnePlane, '+
                         'set to a default value of 15')
                 ring_width = 15
@@ -1273,7 +1273,7 @@ class Tomo:
             weight = 0.1
         else:
             weight = vis_parameters.get('denoise_weight', 0.1)
-            if not is_num(weight, 0.0):
+            if not is_num(weight, ge=0.0):
                 logging.warning(f'Illegal weight ({weight}) in _plotEdgesOnePlane, '+
                         'set to a default value of 0.1')
                 weight = 0.1
@@ -1356,8 +1356,8 @@ class Tomo:
                 title = f'edges row{row} center_offset{center_offset:.2f} PC'
                 self._plotEdgesOnePlane(recon_plane, title)
             if input_yesno('Accept a center location (y) or continue search (n)?', 'y'):
-                center_offset = input_num('    Enter chosen center offset', -center, center,
-                        center_offset_vo)
+                center_offset = input_num('    Enter chosen center offset', ge=-center, le=center,
+                        default=center_offset_vo)
                 del sinogram_T
                 del recon_plane
                 return float(center_offset)
@@ -1370,7 +1370,7 @@ class Tomo:
                     set_center = galaxy_param['set_center']
                 set_range = galaxy_param['set_range']
                 center_offset_step = galaxy_param['set_step']
-                if (not is_num(set_range, 0) or not is_num(center_offset_step) or
+                if (not is_num(set_range, ge=0) or not is_num(center_offset_step) or
                         center_offset_step <= 0):
                     logging.warning('Illegal center finding search parameter, skip search')
                     del sinogram_T
@@ -1380,14 +1380,14 @@ class Tomo:
                 center_offset_upp = set_center+set_range
             else:
                 center_offset_low = input_int('\nEnter lower bound for center offset',
-                        -center, center)
+                        ge=-center, le=center)
                 center_offset_upp = input_int('Enter upper bound for center offset',
-                        center_offset_low, center)
+                        ge=center_offset_low, le=center)
                 if center_offset_upp == center_offset_low:
                     center_offset_step = 1
                 else:
                     center_offset_step = input_int('Enter step size for center offset search',
-                            1, center_offset_upp-center_offset_low)
+                            ge=1, le=center_offset_upp-center_offset_low)
             num_center_offset = 1+int((center_offset_upp-center_offset_low)/center_offset_step)
             center_offsets = np.linspace(center_offset_low, center_offset_upp, num_center_offset)
             for center_offset in center_offsets:
@@ -1403,7 +1403,7 @@ class Tomo:
                     self._plotEdgesOnePlane(recon_plane, title, path='find_center_pngs')
                 else:
                     self._plotEdgesOnePlane(recon_plane, title)
-            if self.galaxy_flag or input_int('\nContinue (0) or end the search (1)', 0, 1):
+            if self.galaxy_flag or input_int('\nContinue (0) or end the search (1)', ge=0, le=1):
                 break
 
         del sinogram_T
@@ -1411,7 +1411,7 @@ class Tomo:
         if self.galaxy_flag:
             center_offset = center_offset_vo
         else:
-            center_offset = input_num('    Enter chosen center offset', -center, center)
+            center_offset = input_num('    Enter chosen center offset', ge=-center, le=center)
         return float(center_offset)
 
     def _reconstructOneTomoStack(self, tomo_stack, thetas, row_bounds=None, center_offsets=[],
@@ -1452,17 +1452,17 @@ class Tomo:
             ring_width = 15
         else:
             sigma = recon_parameters.get('stripe_fw_sigma', 2.0)
-            if not is_num(sigma, 0):
+            if not is_num(sigma, ge=0):
                 logging.warning(f'Illegal stripe_fw_sigma ({sigma}) in '+
                         '_reconstructOneTomoStack, set to a default value of 2.0')
                 ring_width = 15
             secondary_iters = recon_parameters.get('secondary_iters', 0)
-            if not is_int(secondary_iters, 0):
+            if not is_int(secondary_iters, ge=0):
                 logging.warning(f'Illegal secondary_iters ({secondary_iters}) in '+
                         '_reconstructOneTomoStack, set to a default value of 0 (skip them)')
                 ring_width = 0
             ring_width = recon_parameters.get('ring_width', 15)
-            if not is_int(ring_width, 0):
+            if not is_int(ring_width, ge=0):
                 logging.warning(f'Illegal ring_width ({ring_width}) in _reconstructOnePlane, '+
                         'set to a default value of 15')
                 ring_width = 15
@@ -1917,8 +1917,8 @@ class Tomo:
         use_center = False
         row = center_rows[0]
         if self.test_mode or self.galaxy_flag:
-            assert(is_int(row, n1, n2-2))
-        if is_int(row, n1, n2-2):
+            assert(is_int(row, ge=n1, lt=n2-1))
+        if is_int(row, ge=n1, lt=n2-1):
             if self.test_mode or self.galaxy_flag:
                 use_row = True
             else:
@@ -1937,7 +1937,8 @@ class Tomo:
                 if not self.test_mode:
                     quickImshow(center_stack[:,0,:], title=f'theta={theta_start}',
                             aspect='auto')
-                row = input_int('\nEnter row index to find lower center', n1, n2-2, n1)
+                row = input_int('\nEnter row index to find lower center', ge=n1, lt=n2-1,
+                        default=n1)
                 if row == '':
                     row = n1
                 if self.save_plots_only:
@@ -1960,8 +1961,8 @@ class Tomo:
         use_center = False
         row = center_rows[1]
         if self.test_mode or self.galaxy_flag:
-            assert(is_int(row, lower_row+1, n2-1))
-        if is_int(row, lower_row+1, n2-1):
+            assert(is_int(row, gt=lower_row, lt=n2))
+        if is_int(row, gt=lower_row, lt=n2):
             if self.test_mode or self.galaxy_flag:
                 use_row = True
             else:
@@ -1980,7 +1981,8 @@ class Tomo:
                 if not self.test_mode:
                     quickImshow(center_stack[:,0,:], title=f'theta={theta_start}',
                             aspect='auto')
-                row = input_int('\nEnter row index to find upper center', lower_row+1, n2-1, n2-1)
+                row = input_int('\nEnter row index to find upper center', gt=lower_row, lt=n2,
+                        default=n2-1)
                 if row == '':
                     row = n2-1
                 if self.save_plots_only:
