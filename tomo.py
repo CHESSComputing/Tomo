@@ -45,6 +45,12 @@ from msnctools.general import illegal_value, is_int, is_num, is_index_range, get
         input_int, input_num, input_yesno, input_menu, findImageFiles, loadImageStack, clearPlot, \
         draw_mask_1d, quickPlot, clearImshow, quickImshow, combine_tiffs_in_h5, Config
 from msnctools.general import selectImageRange, selectImageBounds
+#from msnctools.detector import TomoDetectorConfig
+#from fit import Fit
+#from general import illegal_value, is_int, is_num, is_index_range, get_trailing_int, \
+#        input_int, input_num, input_yesno, input_menu, findImageFiles, loadImageStack, clearPlot, \
+#        draw_mask_1d, quickPlot, clearImshow, quickImshow, combine_tiffs_in_h5, Config
+#from general import selectImageRange, selectImageBounds
 
 # the following tomopy routines don't run with more than 24 cores on Galaxy-Dev
 #   - tomopy.find_center_vo
@@ -584,17 +590,27 @@ class Tomo:
         dark_field = self.config['dark_field']
         img_start = dark_field.get('img_start', -1)
         img_offset = dark_field.get('img_offset', -1)
-        num_imgs = dark_field.get('num', 0)
-        if not self.test_mode:
-            img_start, img_offset, num_imgs = selectImageRange(img_start, img_offset,
-                num_imgs, 'dark field')
-        if img_start < 0 or num_imgs < 1:
-            logging.error('Unable to find suitable dark field images')
+        num_available = dark_field.get('num_available')
+        if not is_int(num_available, gt=0):
+            logging.warning('Ignore illegal value for the number of available dark field images '+
+                    f'({num_available})')
             if dark_field['data_path']:
                 self.is_valid = False
+            img_start = -1
+            img_offset = 0
+            num_img = 0
+        else:
+            num_img = dark_field.get('num')
+            if not self.test_mode:
+                img_start, img_offset, num_img = selectImageRange(img_start, img_offset,
+                    num_available, num_img=num_img, name='dark field')
+            if img_start < 0 or num_img < 1:
+                logging.error('Unable to find suitable dark field images')
+                if dark_field['data_path']:
+                    self.is_valid = False
         dark_field['img_start'] = img_start
         dark_field['img_offset'] = img_offset
-        dark_field['num'] = num_imgs
+        dark_field['num'] = num_img
         logging.debug(f'Dark field image start index: {dark_field["img_start"]}')
         logging.debug(f'Dark field image offset: {dark_field["img_offset"]}')
         logging.debug(f'Number of dark field images: {dark_field["num"]}')
@@ -603,16 +619,17 @@ class Tomo:
         bright_field = self.config['bright_field']
         img_start = bright_field.get('img_start', -1)
         img_offset = bright_field.get('img_offset', -1)
-        num_imgs = bright_field.get('num', 0)
+        num_available = bright_field.get('num_available')
+        num_img = bright_field.get('num', 0)
         if not self.test_mode:
-            img_start, img_offset, num_imgs = selectImageRange(img_start, img_offset,
-                num_imgs, 'bright field')
-        if img_start < 0 or num_imgs < 1:
+            img_start, img_offset, num_img = selectImageRange(img_start, img_offset,
+                num_available, num_img=num_img, name='bright field')
+        if img_start < 0 or num_img < 1:
             logging.error('Unable to find suitable bright field images')
             self.is_valid = False
         bright_field['img_start'] = img_start
         bright_field['img_offset'] = img_offset
-        bright_field['num'] = num_imgs
+        bright_field['num'] = num_img
         logging.debug(f'Bright field image start index: {bright_field["img_start"]}')
         logging.debug(f'Bright field image offset: {bright_field["img_offset"]}')
         logging.debug(f'Number of bright field images: {bright_field["num"]}')
@@ -625,16 +642,18 @@ class Tomo:
             index = stack['index']
             img_start = stack.get('img_start', -1)
             img_offset = stack.get('img_offset', -1)
-            num_imgs = stack.get('num', 0)
+            num_available = stack.get('num_available')
+            num_img = stack.get('num', 0)
             if not self.test_mode:
-                img_start, img_offset, num_imgs = selectImageRange(img_start, img_offset,
-                        num_imgs, f'tomography stack {index}', num_thetas)
-                if img_start < 0 or num_imgs != num_thetas:
-                    logging.error('Unable to find suitable tomography images')
-                    self.is_valid = False
+                img_start, img_offset, num_img = selectImageRange(img_start, img_offset,
+                        num_available, num_img=num_img, name=f'tomography stack {index}',
+                        num_required=num_thetas)
+            if img_start < 0 or num_img != num_thetas:
+                logging.error('Unable to find suitable tomography images')
+                self.is_valid = False
             stack['img_start'] = img_start
             stack['img_offset'] = img_offset
-            stack['num'] = num_imgs
+            stack['num'] = num_img
             logging.debug(f'Tomography stack {index} image start index: {stack["img_start"]}')
             logging.debug(f'Tomography stack {index} image offset: {stack["img_offset"]}')
             logging.debug(f'Number of tomography images for stack {index}: {stack["num"]}')
@@ -1517,60 +1536,57 @@ class Tomo:
 
         # Find dark field images
         dark_field = self.config['dark_field']
-        img_start, num_imgs, dark_files = findImageFiles(
+        img_start, num_img, dark_files = findImageFiles(
                 dark_field['data_path'], self.config['data_filetype'], 'dark field')
-        if img_start < 0 or num_imgs < 1:
+        if img_start < 0 or num_img < 1:
             logging.error('Unable to find suitable dark field images')
             if dark_field['data_path']:
                 self.is_valid = False
-        img_start_old = dark_field.get('img_start')
-        num_imgs_old = dark_field.get('num')
-        if num_imgs_old is None:
-            dark_field['num'] = num_imgs
-        else:
-            if num_imgs_old > num_imgs:
-                logging.error('Inconsistent number of availaible dark field images')
-                if dark_field['data_path']:
-                    self.is_valid = False
-        if img_start_old is None:
-            dark_field['img_start'] = img_start
-        else:
-            if img_start_old < img_start:
-                logging.error('Inconsistent image start index for dark field images')
-                if dark_field['data_path']:
-                    self.is_valid = False
-        logging.info(f'Number of dark field images = {dark_field["num"]}')
+        if dark_field.get('img_start') is not None and dark_field['img_start'] != img_start:
+            logging.warning('Inconsistent image start index for dark field images '+
+                    f'({dark_field["img_start"]}), use the new value ({img_start})')
+        dark_field['img_start'] = img_start
+        if dark_field.get('num_available') is not None and dark_field['num_available'] != num_img:
+            logging.warning('Inconsistent number of available dark field images '+
+                    f'({dark_field["num_available"]}), use the new value ({num_img})')
+        dark_field['num_available'] = num_img
+        if dark_field.get('num') is not None and dark_field['num'] > num_img:
+            logging.warning(f'Number of currently used dark field images ({dark_field["num"]}) is '+
+                    f'larger than the number of available ones ({num_img}), ignore the current '+
+                    'value')
+            dark_field.pop['num']
+        logging.info(f'Number of available dark field images = {dark_field["num_available"]}')
         logging.info(f'Dark field image start index = {dark_field["img_start"]}')
-        if num_imgs and tiff_to_h5_flag and self.config['data_filetype'] == 'tif':
-            dark_files = combine_tiffs_in_h5(dark_files, num_imgs,
+        if num_img and tiff_to_h5_flag and self.config['data_filetype'] == 'tif':
+            dark_files = combine_tiffs_in_h5(dark_files, num_img,
                     f'{self.config["work_folder"]}/dark_field.h5')
             dark_field['data_path'] = dark_files[0]
 
         # Find bright field images
         bright_field = self.config['bright_field']
-        img_start, num_imgs, bright_files  = findImageFiles(
+        img_start, num_img, bright_files  = findImageFiles(
                 bright_field['data_path'], self.config['data_filetype'], 'bright field')
-        if img_start < 0 or num_imgs < 1:
+        if img_start < 0 or num_img < 1:
             logging.error('Unable to find suitable bright field images')
             self.is_valid = False
-        img_start_old = bright_field.get('img_start')
-        num_imgs_old = bright_field.get('num')
-        if num_imgs_old is None:
-            bright_field['num'] = num_imgs
-        else:
-            if num_imgs_old > num_imgs:
-                logging.error('Inconsistent number of availaible bright field images')
-                self.is_valid = False
-        if img_start_old is None:
-            bright_field['img_start'] = img_start
-        else:
-            if img_start_old < img_start:
-                logging.warning('Inconsistent image start index for bright field images')
-                self.is_valid = False
-        logging.info(f'Number of bright field images = {bright_field["num"]}')
+        if bright_field.get('img_start') is not None and bright_field['img_start'] != img_start:
+            logging.warning('Inconsistent image start index for bright field images '+
+                    f'({bright_field["img_start"]}), use the new value ({img_start})')
+        bright_field['img_start'] = img_start
+        if (bright_field.get('num_available') is not None and 
+                bright_field['num_available'] != num_img):
+            logging.warning('Inconsistent number of available bright field images '+
+                    f'({bright_field["num_available"]}), use the new value ({num_img})')
+        bright_field['num_available'] = num_img
+        if bright_field.get('num') is not None and bright_field['num'] > num_img:
+            logging.warning('Number of currently used bright field images '+
+                    f'({bright_field["num"]}) is larger than the number of available ones '+
+                    f'({num_img}), ignore the current value')
+            bright_field.pop['num']
+        logging.info(f'Number of available bright field images = {bright_field["num_available"]}')
         logging.info(f'Bright field image start index = {bright_field["img_start"]}')
-        if num_imgs and tiff_to_h5_flag and self.config['data_filetype'] == 'tif':
-            bright_files = combine_tiffs_in_h5(bright_files, num_imgs,
+        if num_img and tiff_to_h5_flag and self.config['data_filetype'] == 'tif':
+            bright_files = combine_tiffs_in_h5(bright_files, num_img,
                     f'{self.config["work_folder"]}/bright_field.h5')
             bright_field['data_path'] = bright_files[0]
 
@@ -1578,29 +1594,29 @@ class Tomo:
         tomo_stack_files = []
         for stack in self.config['stack_info']['stacks']:
             index = stack['index']
-            img_start, num_imgs, tomo_files = findImageFiles(
+            img_start, num_img, tomo_files = findImageFiles(
                     stack['data_path'], self.config['data_filetype'], f'tomography set {index}')
-            if img_start < 0 or num_imgs < 1:
+            if img_start < 0 or num_img < 1:
                 logging.error('Unable to find suitable tomography images')
                 self.is_valid = False
-            img_start_old = stack.get('img_start')
-            num_imgs_old = stack.get('num')
-            if num_imgs_old is None:
-                stack['num'] = num_imgs
-            else:
-                if num_imgs_old > num_imgs:
-                    logging.error('Inconsistent number of availaible tomography images')
-                    self.is_valid = False
-            if img_start_old is None:
-                stack['img_start'] = img_start
-            else:
-                if img_start_old < img_start:
-                    logging.warning('Inconsistent image start index for tomography images')
-                    self.is_valid = False
-            logging.info(f'Number of tomography images for set {index} = {stack["num"]}')
+            if stack.get('img_start') is not None and stack['img_start'] != img_start:
+                logging.warning('Inconsistent image start index for tomography images '+
+                        f'({stack["img_start"]}), use the new value ({img_start})')
+            stack['img_start'] = img_start
+            if stack.get('num_available') is not None and stack['num_available'] != num_img:
+                logging.warning('Inconsistent number of available tomography images '+
+                        f'({stack["num_available"]}), use the new value ({num_img})')
+            stack['num_available'] = num_img
+            if stack.get('num') is not None and stack['num'] > num_img:
+                logging.warning(f'Number of currently used tomography images ({stack["num"]}) is '+
+                        f'larger than the number of available ones ({num_img}), ignore the '+
+                        'current value')
+                stack.pop['num']
+            logging.info(f'Number of available tomography images for set {index} = '+
+                    f'{stack["num_available"]}')
             logging.info(f'Tomography set {index} image start index = {stack["img_start"]}')
-            if num_imgs and tiff_to_h5_flag and self.config['data_filetype'] == 'tif':
-                tomo_files = combine_tiffs_in_h5(tomo_files, num_imgs,
+            if num_img and tiff_to_h5_flag and self.config['data_filetype'] == 'tif':
+                tomo_files = combine_tiffs_in_h5(tomo_files, num_img,
                         f'{self.config["work_folder"]}/tomo_field_{index}.h5')
                 stack['data_path'] = tomo_files[0]
             tomo_stack_files.append(tomo_files)
