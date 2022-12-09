@@ -11,8 +11,10 @@ except:
 from functools import cache
 from pathlib import PosixPath
 from pydantic import validator, ValidationError, conint, confloat, constr, \
-        conlist, FilePath
+        conlist, FilePath, PrivateAttr
 from pydantic import BaseModel as PydanticBaseModel
+from nexusformat.nexus import *
+from time import time
 from typing import Optional, Literal
 from pyspec.file.spec import FileSpec
 
@@ -44,6 +46,7 @@ def get_scanparser(spec_file:str, scan_number:int):
     else:
         return(ScanParser(spec_file, scan_number))
 
+
 class BaseModel(PydanticBaseModel):
     class Config:
         validate_assignment = True
@@ -56,17 +59,35 @@ class BaseModel(PydanticBaseModel):
         return(obj)
 
     @classmethod
-    def construct_from_yaml(cls, yaml_file):
-        file_exists_and_readable(yaml_file)
+    def construct_from_yaml(cls, filename):
         try:
-            with open(yaml_file, 'r') as infile:
+            with open(filename, 'r') as infile:
                 indict = yaml.load(infile, Loader=yaml.CLoader)
         except:
-            raise(ValueError(f'Could not load a dictionary from {yaml_file}'))
+            raise(ValueError(f'Could not load a dictionary from {filename}'))
         else:
             obj = cls(**indict)
-            obj.cli()
             return(obj)
+
+    @classmethod
+    def construct_from_file(cls, filename, logger=logging.getLogger(__name__)):
+        file_exists_and_readable(filename)
+        filename = os.path.abspath(filename)
+        fileformat = os.path.splitext(filename)[1]
+        yaml_extensions = ('.yaml','.yml')
+        nexus_extensions = ('.nxs','.nx5','.h5','.hdf5')
+        t0 = time()
+        if fileformat.lower() in yaml_extensions:
+            obj = cls.construct_from_yaml(filename)
+            logger.info(f'Constructed a model from {filename} in {time()-t0:.2f} seconds.')
+            return(obj)
+        elif fileformat.lower() in nexus_extensions:
+            obj = cls.construct_from_nexus(filename)
+            logger.info(f'Constructed a model from {filename} in {time()-t0:.2f} seconds.')
+            return(obj)
+        else:
+            logger.error(f'Unsupported file extension for constructing a model: {fileformat}')
+            raise(TypeError(f'Unrecognized file extension: {fileformat}'))
 
     def dict_for_yaml(self, exclude_fields=[]):
         yaml_dict = {}
@@ -89,31 +110,71 @@ class BaseModel(PydanticBaseModel):
                     continue
         return(yaml_dict)
 
-    def write_to_yaml(self, filename):
+    def write_to_yaml(self, filename=None, logger=logging.getLogger(__name__)):
         yaml_dict = self.dict_for_yaml()
+        if filename is None:
+            logger.info('Printing yaml representation here:\n'+
+                    f'{yaml.dump(yaml_dict, sort_keys=False)}')
+        else:
+            try:
+                with open(filename, 'w') as outfile:
+                    yaml.dump(yaml_dict, outfile, sort_keys=False)
+                logger.info(f'Sucessfully wrote this model to {filename}')
+            except:
+                logger.error(f'Unknown error -- could not write to {filename} in yaml format.')
+                logger.info('Printing yaml representation here:\n'+
+                        f'{yaml.dump(yaml_dict, sort_keys=False)}')
+
+    def write_to_file(self, filename, force_overwrite=False, logger=logging.getLogger(__name__)):
+        file_writeable, fileformat = self.output_file_valid(filename,
+                force_overwrite=force_overwrite, logger=logger)
+        if fileformat == 'yaml':
+            if file_writeable:
+                self.write_to_yaml(filename=filename, logger=logger)
+            else:
+                self.write_to_yaml(logger=logger)
+        elif fileformat == 'nexus':
+            if file_writeable:
+                self.write_to_nexus(filename=filename, logger=logger)
+
+    def output_file_valid(self, filename, force_overwrite=False,
+            logger=logging.getLogger(__name__)):
+        filename = os.path.abspath(filename)
+        fileformat = os.path.splitext(filename)[1]
+        yaml_extensions = ('.yaml','.yml')
+        nexus_extensions = ('.nxs','.nx5','.h5','.hdf5')
+        if fileformat.lower() not in (*yaml_extensions, *nexus_extensions):
+            return(False, None) # Only yaml and NeXus files allowed for output now.
+        elif fileformat.lower() in yaml_extensions:
+            fileformat = 'yaml'
+        elif fileformat.lower() in nexus_extensions:
+            fileformat = 'nexus'
         if os.path.isfile(filename):
             if os.access(filename, os.W_OK):
-                overwrite = input_yesno(f'{filename} already exists. Overwrite? (y/n)', 'n')
-                if not overwrite:
-                    print(f'{filename} will not be overwritten. '+
-                            'Printing yaml representation here instead:')
-                    print(yaml.dump(yaml_dict, sort_keys=False))
-                    return
-        try:
-            with open(filename, 'w') as f:
-                yaml.dump(yaml_dict, f, sort_keys=False)
-        except:
-            print(f'Could not write to {filename} in yaml format. '+
-                    'Printing yaml representation here instead:')
-            print(yaml.dump(yaml_dict, sort_keys=False))
+                if not force_overwrite:
+                    logger.error(f'{filename} will not be overwritten.')
+                    return(False, fileformat)
+            else:
+                logger.error(f'Cannot access {filename} for writing.')
+                return(False, fileformat)
+        if os.path.isdir(os.path.dirname(filename)):
+            if os.access(os.path.dirname(filename), os.W_OK):
+                return(True, fileformat)
+            else:
+                logger.error(f'Cannot access {os.path.dirname(filename)} for writing.')
+                return(False, fileformat)
+        else:
+            try:
+                os.makedirs(os.path.dirname(filename))
+                return(True, fileformat)
+            except:
+                logger.error(f'Cannot create {os.path.dirname(filename)} for output.')
+                return(False, fileformat)
 
     def set_single_attr_cli(self, attr_name, attr_desc='unknown attribute', list_flag=False,
             **cli_kwargs):
         try:
-            print(f'attr_name = {attr_name}')
-            print(f'dict = {self.__dict__}')
             attr = getattr(self, attr_name)
-            print(f'attr = {attr}')
             if cli_kwargs.get('chain_attr_desc', False):
                 cli_kwargs['attr_desc'] = attr_desc
             attr.cli(**cli_kwargs)
@@ -198,13 +259,13 @@ class Detector(BaseModel):
         else:
             return(None)
 
-    def construct_from_yaml(self, yaml_file):
-        file_exists_and_readable(yaml_file)
+    def construct_from_yaml(self, filename):
+        file_exists_and_readable(filename)
         try:
-            with open(yaml_file, 'r') as infile:
+            with open(filename, 'r') as infile:
                 indict = yaml.load(infile, Loader=yaml.CLoader)
         except:
-            raise(ValueError(f'Could not load a dictionary from {yaml_file}'))
+            raise(ValueError(f'Could not load a dictionary from {filename}'))
         detector = indict['detector']
         self.id = detector['id']
         pixels = detector['pixels']
@@ -222,6 +283,23 @@ class Detector(BaseModel):
                 'square pixels or a pair of values for the size in the respective row and column '+
                 'directions)', list_flag=True)
         self.set_single_attr_cli('lens_magnification', 'lens magnification')
+
+    def construct_nxdetector(self):
+        nxdetector = NXdetector()
+        nxdetector.local_name = self.id
+#        nxdetector.rows = self.rows
+#        nxdetector.rows.attrs['units'] = 'pixels'
+#        nxdetector.columns = self.columns
+#        nxdetector.columns.attrs['units'] = 'pixels'
+        if len(self.pixel_size) ==1:
+            nxdetector.x_pixel_size = self.pixel_size[0]
+            nxdetector.y_pixel_size = self.pixel_size[0]
+        else:
+            nxdetector.x_pixel_size = self.pixel_size[0]
+            nxdetector.y_pixel_size = self.pixel_size[1]
+        nxdetector.x_pixel_size.attrs['units'] = 'mm'
+        nxdetector.y_pixel_size.attrs['units'] = 'mm'
+        return(nxdetector)
 
 
 class ScanData(BaseModel):
@@ -303,9 +381,9 @@ class SpecScans(BaseModel):
     scan_numbers: conlist(item_type=conint(gt=0), min_items=1)
 
     @validator('spec_file')
-    @classmethod
     def validate_spec_file(cls, spec_file):
         try:
+            spec_file = os.path.abspath(spec_file)
             sspec_file = FileSpec(spec_file)
         except:
             raise(ValueError(f'Invalid SPEC file {spec_file}'))
@@ -313,7 +391,6 @@ class SpecScans(BaseModel):
             return(spec_file)
 
     @validator('scan_numbers')
-    @classmethod
     def validate_scan_numbers(cls, scan_numbers, values):
         spec_file = values.get('spec_file')
         if spec_file is not None:
@@ -489,7 +566,6 @@ class TomoField(SpecScans):
     stack_info: conlist(item_type=dict, min_items=1) = []
 
 #    @validator('data_path')
-#    @classmethod
 #    def validate_data_path(cls, data_path):
 #        if os.path.splitext(data_path)[1] == '.h5':
 #            file_exists_and_readable(data_path)
@@ -506,7 +582,6 @@ class TomoField(SpecScans):
 #            return(data_path)
 
     @validator('theta_range')
-    @classmethod
     def validate_theta_range(cls, theta_range):
         if len(theta_range) != 4:
             raise(ValueError(f'Invalid theta range {theta_range}'))
@@ -660,33 +735,45 @@ class TomoField(SpecScans):
             self.image_range_cli(scan_number, attr_desc, detector.id)
 
 
-class Setup(BaseModel):
+class MapConfig(BaseModel):
+    title: constr(strip_whitespace=True, min_length=1)
     station: Literal['smb', 'fmb', 'fast', 'id1a3', 'id3a', 'id3b'] = None
     detector: Detector = Detector.construct()
     dark_field: Optional[FlatField]
     bright_field: FlatField = FlatField.construct()
     tomo_fields: TomoField = TomoField.construct()
-    #tomo_fields: conlist(item_type=TomoField, min_items=1) = [TomoField.construct()]
+    _thetas: list[float] = PrivateAttr()
 
     @validator('station', pre=True)
     @classmethod
     def validate_station(cls, station):
         return(station.lower())
 
-    @property
-    def get_bright_field(self):
-        return(self.bright_field)
+#    @property
+#    def bright_field(self):
+#        return(self.bright_field)
 
+#    @property
+#    def tomo_fields(self):
+#        return(self.tomo_fields)
+
+#FIX cache?
     @property
-    def get_tomo_fields(self, n_stack):
-        #return(self.tomo_fields[n_stack])
-        return(self.tomo_fields)
+    def thetas(self):
+        try:
+            return(self._thetas)
+        except:
+            theta_range = self.tomo_fields.theta_range
+            self._thetas = np.linspace(theta_range['start'], theta_range['end'],
+                    theta_range['num'])
+            return(self._thetas)
 
     def cli(self):
         print('\n\n -- Configure a map from a set of SPEC scans (dark, bright, and tomo), '+
                 'and / or detector data -- ')
+        self.set_single_attr_cli('title', 'title for the map entry')
         self.set_single_attr_cli('station', 'name of the station at which scans were collected '+
-                '(examples: ID1A3, ID3A, or ID3B)')
+                '(examples: id1a3, id3a, id3b, smb, or fmb)')
         import_scanparser(self.station)
         use_detector_config = False
         if hasattr(self.detector, 'id') and len(self.detector.id):
@@ -702,19 +789,106 @@ class Setup(BaseModel):
         have_dark_field = input_yesno(f'Are Dark field images available? (y/n)')
         if have_dark_field:
             attr = getattr(self, 'dark_field', None)
-            print(f'attr at AA = {attr}')
             if attr is None:
                 self.dark_field = FlatField.construct()
             self.set_single_attr_cli('dark_field', 'Dark field', chain_attr_desc=True,
                     station=self.station, detector=self.detector)
         self.set_single_attr_cli('bright_field', 'Bright field', chain_attr_desc=True,
                 station=self.station, detector=self.detector)
-#        self.set_list_attr_cli('tomo_fields', 'Tomo field', chain_attr_desc=True,
-#                station=self.station, detector=self.detector)
         self.set_single_attr_cli('tomo_fields', 'Tomo field', chain_attr_desc=True,
                 station=self.station, detector=self.detector)
 
-#tomo = Setup.construct_from_cli()
-tomo = Setup.construct_from_yaml('config.yaml')
-tomo.write_to_yaml('config2.yaml')
-print(f'\n\ntomo:\n{tomo}')
+    def construct_nxentry(self, nxroot, logger=logging.getLogger(__name__)):
+        t0 = time()
+        # Construct base NXentry
+        nxentry = NXentry()
+
+        # Add NXentry to the NXroot
+        nxroot[self.title] = nxentry
+
+        # Add NXsample to NXentry
+#FIX        nxentry.sample = self.sample.construct_nxobject()
+
+        # Add NXinstrument to NXentry
+        nxentry.instrument = NXinstrument()
+
+        # Add an NXdetector to the NXinstrument
+        nxentry.instrument[self.detector.id] = self.detector.construct_nxdetector()
+
+        # Tag the NXentry with the station (as an attribute)
+        nxentry.attrs['station'] = self.station
+
+        # Add independent dimensions & their coordinate values to NXentry as an NXdata
+        nxentry.independent_dimensions = NXdata()
+        nxentry.independent_dimensions.attrs['axes'] = ['theta']
+        nxentry.independent_dimensions['theta'] = NXfield(self.thetas)
+        nxentry.independent_dimensions['theta'].units = 'degrees'
+        nxentry.independent_dimensions['theta'].attrs['long_name'] = f'theta (degrees)'
+
+        # Since independent dimensions are reused for all signals in this map,
+        # define a convenience function for linking to their values.
+        def link_independent_dimensions(nxdata_path):
+            for indep_dim in self.independent_dimensions:
+                nxroot[nxdata_path].makelink(
+                        nxentry.independent_dimensions[indep_dim.label])
+                nxroot[nxdata_path].attrs[f'{indep_dim.label}_indices'] = \
+                        nxentry.independent_dimensions.attrs[f'{indep_dim.label}_indices']
+
+        # Add a NXcollection to the base NXentry to hold metadata about the spec scans in the map
+        nxentry.spec_scans = NXcollection()
+
+        # Add the dark field
+        if hasattr(self, 'bright_field'):
+            print(f'bright_field:\n{self.bright_field}')
+            return(nxentry)
+            # Add a NXcollection to the NXcollection for all the scans in a single spec file
+            scanparser = bright_field.scanparser(bright_field.scan_number)
+            nxentry.spec_scans[scanparser.scan_name] = bright_field.construct_nxcollection(detector)
+                t1 = time()
+                entry_name = f'{scanparser.scan_name}'
+                # Use multiple threads to fill in arrays set up to contain point-by-point scan data
+                def fill_data(scan_step_index:int):
+                    index = scans.get_index(scan_number, scan_step_index, self)
+                    logger.debug(f'Adding data to nexus arrays from scan {scanparser.scan_title} step {scan_step_index}')
+                    # Fill in the scalar values arrays
+                    if self.signals.scalar_values is not None:
+                        for scalar_values in self.signals.scalar_values:
+                            nxentry[scalar_values.label][index] = scalar_values.get_value(scans, scan_number, scan_step_index)
+                    # Fill in processed data
+                    for scatter_type in ('saxs', 'waxs'):
+                        scatter_config = getattr(self.signals, scatter_type, None)
+                        if scatter_config is not None:
+                            # Fill in paths to raw detector data
+                            for detector in scatter_config.detectors:
+                                nxentry.spec_scans[entry_name].instrument[detector.prefix].raw_data_files[scan_step_index] = scanparser.get_detector_data_file(detector.prefix, scan_step_index)
+                            # Fill in the integrated data arrays
+                            for integration_type in scatter_config.integration.configured_integration_types:
+                                integration_config = getattr(scatter_config.integration, integration_type)
+                                nxentry[scatter_type][integration_type].data.I[index] = integration_config.get_integrated_data(scatter_config.detectors, scans, scan_number, scan_step_index)
+                # Create a pool of threads that run fill_data for each scan point.
+                # Run the 0th scan step first so threads can access certain integrators, etc.
+                # through the cache.
+                fill_data(0)
+                with ThreadPool(processes=4) as pool:
+                    pool.map(fill_data, range(1, scanparser.spec_scan_npts))
+                logger.info(f'Filled nexus data arrays for scan {scanparser.scan_title} in {time()-t1:.2f} seconds.')
+        logger.info(f'Constructed an NXentry for {self.title}: {time()-t0:.2f} seconds')
+        return(nxentry)
+
+
+class TOMOWorkflow(BaseModel):
+    sample_maps: conlist(item_type=MapConfig, min_items=1) = [MapConfig.construct()]
+    def cli(self):
+        print(' -- Configure a map -- ')
+        self.set_list_attr_cli('sample_maps', 'sample map')
+    def construct_nxfile(self, filename, mode='w-', logger=logging.getLogger(__name__)):
+        nxroot = NXroot()
+        for sample_map in self.sample_maps:
+            import_scanparser(sample_map.station)
+            sample_map.construct_nxentry(nxroot, logger=logger)
+        nxroot.save(filename, mode=mode)
+    def write_to_nexus(self, filename, logger=logging.getLogger(__name__)):
+        t0 = time()
+        self.construct_nxfile(filename, mode='w', logger=logger)
+        logger.info(f'Saved all sample maps to {filename} in {time()-t0:.2f} seconds.')
+
