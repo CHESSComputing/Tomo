@@ -25,10 +25,12 @@ from msnctools.general import is_int, is_num, input_int, input_int_list, input_n
 
 def import_scanparser(station):
     if station in ('smb', 'fast', 'id1a3', 'id3a'):
-        from msnctools.scanparsers import SMBRotationScanParser
+        from scanparsers import SMBRotationScanParser
+#        from msnctools.scanparsers import SMBRotationScanParser
         globals()['ScanParser'] = SMBRotationScanParser
     elif station in ('fmb', 'id3b'):
-        from msnctools.scanparsers import FMBRotationScanParser
+        from scanparsers import FMBRotationScanParser
+#        from msnctools.scanparsers import FMBRotationScanParser
         globals()['ScanParser'] = FMBRotationScanParser
     else:
         raise(RuntimeError(f'Invalid station: {station}'))
@@ -173,11 +175,40 @@ class BaseModel(PydanticBaseModel):
 
     def set_single_attr_cli(self, attr_name, attr_desc='unknown attribute', list_flag=False,
             **cli_kwargs):
+        if cli_kwargs.get('chain_attr_desc', False):
+            cli_kwargs['attr_desc'] = attr_desc
         try:
-            attr = getattr(self, attr_name)
+            attr = getattr(self, attr_name, None)
+            if attr is None:
+                attr = self.__fields__[attr_name].type_.construct()
             if cli_kwargs.get('chain_attr_desc', False):
                 cli_kwargs['attr_desc'] = attr_desc
-            attr.cli(**cli_kwargs)
+            input_accepted = False
+            while not input_accepted:
+                try:
+                    attr.cli(**cli_kwargs)
+                except ValidationError as e:
+                    print(e)
+                    print(f'Removing {attr_desc} configuration')
+                    attr = self.__fields__[attr_name].type_.construct()
+                    continue
+                except KeyboardInterrupt as e:
+                    raise(e)
+                except BaseException as e:
+                    print(f'{type(e).__name__}: {e}')
+                    print(f'Removing {attr_desc} configuration')
+                    attr = self.__fields__[attr_name].type_.construct()
+                    continue
+                try:
+                    setattr(self, attr_name, attr)
+                except ValidationError as e:
+                    print(e)
+                except KeyboardInterrupt as e:
+                    raise(e)
+                except BaseException as e:
+                    print(f'{type(e).__name__}: {e}')
+                else:
+                    input_accepted = True
         except:
             input_accepted = False
             while not input_accepted:
@@ -260,22 +291,24 @@ class Detector(BaseModel):
             return(None)
 
     def construct_from_yaml(self, filename):
-        file_exists_and_readable(filename)
         try:
             with open(filename, 'r') as infile:
                 indict = yaml.load(infile, Loader=yaml.CLoader)
+            detector = indict['detector']
+            self.id = detector['id']
+            pixels = detector['pixels']
+            self.rows = pixels['rows']
+            self.columns = pixels['columns']
+            self.pixel_size = pixels['size']
+            self.lens_magnification = indict['lens_magnification']
         except:
-            raise(ValueError(f'Could not load a dictionary from {filename}'))
-        detector = indict['detector']
-        self.id = detector['id']
-        pixels = detector['pixels']
-        self.rows = pixels['rows']
-        self.columns = pixels['columns']
-        self.pixel_size = pixels['size']
-        self.lens_magnification = indict['lens_magnification']
+            logging.warning(f'Could not load a dictionary from {filename}')
+            return(False)
+        else:
+            return(True)
 
     def cli(self):
-        print(' -- Configure the detector -- ')
+        print('\n -- Configure the detector -- ')
         self.set_single_attr_cli('id', 'detector ID')
         self.set_single_attr_cli('rows', 'number of pixel rows')
         self.set_single_attr_cli('columns', 'number of pixel columns')
@@ -284,13 +317,9 @@ class Detector(BaseModel):
                 'directions)', list_flag=True)
         self.set_single_attr_cli('lens_magnification', 'lens magnification')
 
-    def construct_nxdetector(self):
+    def construct_nxdetector(self, station, dark_field, bright_field, tomo_fields):
         nxdetector = NXdetector()
         nxdetector.local_name = self.id
-#        nxdetector.rows = self.rows
-#        nxdetector.rows.attrs['units'] = 'pixels'
-#        nxdetector.columns = self.columns
-#        nxdetector.columns.attrs['units'] = 'pixels'
         if len(self.pixel_size) ==1:
             nxdetector.x_pixel_size = self.pixel_size[0]
             nxdetector.y_pixel_size = self.pixel_size[0]
@@ -299,81 +328,57 @@ class Detector(BaseModel):
             nxdetector.y_pixel_size = self.pixel_size[1]
         nxdetector.x_pixel_size.attrs['units'] = 'mm'
         nxdetector.y_pixel_size.attrs['units'] = 'mm'
+
+        if station in ('smb', 'fast', 'id1a3', 'id3a'):
+            detector_prefix = None
+        elif station in ('fmb', 'id3b'):
+            detector_prefix = self.id
+
+        # Collect all detector images
+        image_key = []
+        sequence_number = []
+        image_stack = []
+
+        # Add dark field
+        if dark_field is not None:
+            for stack in dark_field.stack_info:
+                offset_index = stack['offset_index']
+                num = stack['num']
+                scan_number = stack['scan_number']
+                image_key += num*[2]
+                sequence_number += [i for i in range(num)]
+                for scan_step_index in range(offset_index, num+offset_index):
+                    image_stack.append(dark_field.get_detector_data(detector_prefix, scan_number,
+                            scan_step_index))
+ 
+        # Add bright field
+        for stack in bright_field.stack_info:
+            offset_index = stack['offset_index']
+            num = stack['num']
+            scan_number = stack['scan_number']
+            image_key += num*[1]
+            sequence_number += [i for i in range(num)]
+            for scan_step_index in range(offset_index, num+offset_index):
+                image_stack.append(bright_field.get_detector_data(detector_prefix, scan_number,
+                        scan_step_index))
+
+        # Add tomo fields
+        for stack in tomo_fields.stack_info:
+            offset_index = stack['offset_index']
+            num = stack['num']
+            scan_number = stack['scan_number']
+            image_key += num*[0]
+            sequence_number += [i for i in range(num)]
+            for scan_step_index in range(offset_index, num+offset_index):
+                image_stack.append(tomo_fields.get_detector_data(detector_prefix, scan_number,
+                        scan_step_index))
+
+        # Add image data to NXdetector
+        nxdetector.image_key = image_key
+        nxdetector.sequence_number = sequence_number
+        nxdetector.data = np.stack([image for image in image_stack])
+
         return(nxdetector)
-
-
-class ScanData(BaseModel):
-    spec_file: FilePath
-    scan_number: conint(gt=0)
-
-    @validator('spec_file')
-    @classmethod
-    def validate_spec_file(cls, spec_file):
-        try:
-            sspec_file = FileSpec(spec_file)
-        except:
-            raise(ValueError(f'Invalid SPEC file {spec_file}'))
-        else:
-            return(spec_file)
-
-    @validator('scan_number')
-    @classmethod
-    def validate_scan_number(cls, scan_number, values):
-        spec_file = values.get('spec_file')
-        if spec_file is not None:
-            spec_scan = FileSpec(spec_file)
-            scan = spec_scan.get_scan_by_number(scan_number)
-            if scan is not None:
-                return(scan_number)
-            else:
-                raise(ValueError(f'There is no scan number {scan_number} in {spec_file}'))
-
-    @property
-    def available_scan_numbers(self):
-        return(get_available_scan_numbers(self.spec_file))
-
-    @property
-    def scanparser(self):
-        return(get_scanparser(self.spec_file, self.scan_number))
-
-    def scan_number_cli(self, attr_desc):
-        if len(self.available_scan_numbers) == 1:
-            self.scan_number = self.available_scan_numbers[0]
-        else:
-            if hasattr(self, 'scan_number'):
-                print(f'Currently selected {attr_desc}scan number is: {self.scan_number}')
-                menu_options = [f'Select one of the available {attr_desc}scan numbers',
-                                f'Keep the currently selected {attr_desc}scan number']
-                input_mode = input_menu(menu_options, header='Choose one of the following options '+
-                        'for selecting a scan number')
-            else:
-                input_mode = 0
-            if input_mode == 0:
-                print(f'Available {attr_desc}scan numbers in {self.spec_file} are: '+
-                        f'{self.available_scan_numbers}')
-                accept_scan_numbers = False
-                while not accept_scan_numbers:
-                    try:
-                        self.scan_number = input_int(f'Enter a {attr_desc}scan number')
-                    except ValidationError as e:
-                        print(e)
-                    except KeyboardInterrupt as e:
-                        raise(e)
-                    except BaseException as e:
-                        print(f'Unexpected {type(e).__name__}: {e}')
-                    else:
-                        accept_scan_numbers = True
-            elif input_mode == 1:
-                pass
-
-    def cli(self, **cli_kwargs):
-        if cli_kwargs.get('attr_desc') is not None:
-            attr_desc = f'{cli_kwargs["attr_desc"]} '
-        else:
-            attr_desc = ''
-        print(f' -- Configure the location of the {attr_desc}scan data -- ')
-        self.set_single_attr_cli('spec_file', attr_desc+'SPEC file path')
-        self.scan_number_cli(attr_desc)
 
 
 class SpecScans(BaseModel):
@@ -404,6 +409,13 @@ class SpecScans(BaseModel):
     @property
     def available_scan_numbers(self):
         return(get_available_scan_numbers(self.spec_file))
+
+    def get_detector_data(self, detector_prefix, scan_number, scan_step_index):
+        scanparser = get_scanparser(self.spec_file, scan_number)
+        if detector_prefix is None:
+            return(scanparser.get_detector_data(scan_step_index))
+        else:
+            return(scanparser.get_detector_data(detector_prefix, scan_step_index))
 
     def get_scanparser(self, scan_number):
         return(get_scanparser(self.spec_file, scan_number))
@@ -446,94 +458,61 @@ class SpecScans(BaseModel):
             attr_desc = f'{cli_kwargs["attr_desc"]} '
         else:
             attr_desc = ''
-        print(f' -- Configure which scans to use from a single {attr_desc}SPEC file')
+        print(f'\n -- Configure which scans to use from a single {attr_desc}SPEC file')
         self.set_single_attr_cli('spec_file', attr_desc+'SPEC file path')
         self.scan_numbers_cli(attr_desc)
 
-#    def get_nxentry_name(self, scan_number:int):
-#        return(f'{self.get_scanparser(scan_number).scan_name}/scan_{scan_number}')
-#    def get_detector_data(self, detectors:list[Detector], scan_number:int, scan_step_index:int):
-#        return(get_detector_data(tuple([detector.prefix for detector in detectors]), self.spec_file, scan_number, scan_step_index))
-#    def get_mapping_motor_value(self, scan_number:int, scan_step_index:int, mapping_motor_mnemonic:str):
-#        return(get_mapping_motor_value(self.spec_file, scan_number, scan_step_index, mapping_motor_mnemonic))
-#    def get_index_in_map(self, scan_number:int, scan_step_index:int, map_coordinates:dict):
-#        map_coordinates = tuple([(coordinate_name,tuple(coordinate_values)) for coordinate_name,coordinate_values in map_coordinates.items()])
-#        return(get_index_in_map(self.spec_file, scan_number, scan_step_index, map_coordinates))
-#    def construct_nxobject(self, nxgroup, mapping_motors=[], detector_prefixes=[]) -> list[NXentry]:
-#        if 'spec_scans' not in nxgroup:
-#            nxgroup.spec_scans = NXcollection()
-#        scanparser = self.get_scanparser(self.scan_numbers[0])
-#        nxgroup.spec_scans[scanparser.scan_name] = NXcollection()
-#        nxgroup.spec_scans[scanparser.scan_name].attrs['spec_file'] = self.spec_file
-#        nxgroup.spec_scans[scanparser.scan_name].attrs['date'] = scanparser.spec_scan.file_date
-#        for scan_number in self.scan_numbers:
-#            scanparser = self.get_scanparser(scan_number)
-#            entry_name = self.get_nxentry_name(scan_number)
-#            nxgroup.spec_scans[entry_name] = NXentry()
-#            nxgroup.spec_scans[entry_name].start_time = scanparser.spec_scan.date
-#            nxgroup.spec_scans[entry_name].instrument = NXinstrument()
-#            for mapping_motor in mapping_motors:
-#                nxgroup.spec_scans[entry_name].instrument[mapping_motor.mnemonic] = NXpositioner()
-#                motor_value = self.get_mapping_motor_value(scan_number, -1, mapping_motor.mnemonic)
-#                nxgroup.spec_scans[entry_name].instrument[mapping_motor.mnemonic].value = motor_value
-#                nxgroup.spec_scans[entry_name].instrument[mapping_motor.mnemonic].value.units = mapping_motor.units
-#            for detector_prefix in detector_prefixes:
-#                nxgroup.spec_scans[entry_name].instrument[detector_prefix] = NXdetector()
-#        return(nxgroup)
 
-#@cache
-#def get_mapping_motor_value(spec_file:str, scan_number:int, scan_step_index:int, mapping_motor_mnemonic:str):
-#    scanparser = get_scanparser(spec_file, scan_number)
-#    if mapping_motor_mnemonic in scanparser.spec_scan_motor_mnes:
-#        motor_i = scanparser.spec_scan_motor_mnes.index(mapping_motor_mnemonic)
-#        if scan_step_index >= 0:
-#            scan_step = np.unravel_index(scan_step_index, scanparser.spec_scan_shape, order='F')
-#            motor_value = scanparser.spec_scan_motor_vals[motor_i][scan_step[motor_i]]
-#        else:
-#            motor_value = scanparser.spec_scan_motor_vals[motor_i]
-#    else:
-#        motor_value = [scanparser.get_spec_positioner_value(mapping_motor_mnemonic)]
-#    return(motor_value)
-#@cache
-#def get_index_in_map(spec_file:str, scan_number:int, scan_step_index:int, map_coordinates:tuple):
-#    map_coordinates = dict(map_coordinates)
-#    map_index = ()
-#    scanparser = get_scanparser(spec_file, scan_number)
-#    for mnemonic,values in map_coordinates.items():
-#        coord_val = get_mapping_motor_value(spec_file, scan_number, scan_step_index, mnemonic)
-#        coord_index = values.index(coord_val)
-#        map_index = (coord_index, *map_index)
-#    return(map_index)
-#@lru_cache(maxsize=10)
-#def get_detector_data(detector_prefixes:tuple, spec_file:str, scan_number:int, scan_step_index:int):
-#    detector_data = []
-#    scanparser = get_scanparser(spec_file, scan_number)
-#    for prefix in detector_prefixes:
-#        image_data = scanparser.get_detector_data(prefix, scan_step_index)
-#        detector_data.append(image_data)
-#    return(detector_data)
+class FlatField(SpecScans):
+    stack_info: conlist(item_type=dict, min_items=1) = []
 
+    @validator('stack_info')
+    def validate_stack_info(cls, stack_info, values):
+        scan_numbers = values.get('scan_numbers')
+        for stack in stack_info:
+            assert(stack['scan_number'] in scan_numbers)
+            is_int(stack['start_index'], raise_error=True)
+            num_image = stack['num']
+            is_int(stack['num'], ge=0, raise_error=True)
+            is_int(stack['offset_index'], ge=0, lt=num_image, raise_error=True)
+            is_num(stack['ref_height'], raise_error=True)
+        return(stack_info)
 
-class FlatField(ScanData):
-#    data_path: constr(strip_whitespace=True, min_length=1)
-    stack_info: conlist(item_type=dict, min_items=1, max_items=1) = []
+    def image_range_cli(self, scan_number, attr_desc, detector_id):
+        # Parse the available image range
+        parser = self.get_scanparser(scan_number)
+        image_offset = parser.starting_image_offset
+        num_image = parser.get_num_image(detector_id.upper())
+        have_stack = [n_stack for n_stack, stack in enumerate(self.stack_info)
+                if stack['scan_number'] == scan_number]
+        if len(have_stack) > 1:
+            raise(ValueError('Duplicate scan_numbers in image stack'))
 
-#    @validator('data_path')
-#    @classmethod
-#    def validate_data_path(cls, data_path):
-#        if os.path.splitext(data_path)[1] == '.h5':
-#            file_exists_and_readable(data_path)
-#            try:
-#                if not h5py.is_hdf5(data_path):
-#                    raise(ValueError(f'Invalid h5 file {data_path}'))
-#            except BaseException as e:
-#                print(f'Unexpected {type(e).__name__}: {e}')
-#            else:
-#                return(data_path)
-#        else:
-#            if not os.path.isdir(data_path):
-#                raise(ValueError(f'Invalid file path {data_path}'))
-#            return(data_path)
+        # Select the image set
+        print(f'Available good image set index range: [{image_offset}, {num_image-1}]')
+        image_set_approved = False
+        if len(have_stack):
+            stack = self.stack_info[have_stack[0]]
+            print(f'Current start image offset index and number of images: '+
+                    f'{stack["offset_index"]} and {stack["num"]}')
+            image_set_approved = input_yesno(f'Accept these values (y/n)?', 'y')
+        if not image_set_approved:
+            while not image_set_approved:
+                offset_index = input_int(f'Enter the start image offset', ge=image_offset,
+                        le=num_image-1, default=image_offset)
+                num = input_int(f'Enter the number of images', ge=1,
+                        le=num_image-offset_index, default=num_image-offset_index)
+                print(f'Current start image offset and number of images: {offset_index} and {num}')
+                image_set_approved = input_yesno(f'Accept these values (y/n)?', 'y')
+            if len(have_stack):
+                stack['start_index'] = parser.starting_image_index
+                stack['offset_index'] = offset_index
+                stack['num'] = num
+                stack['ref_height'] = parser.vertical_shift
+            else:
+                self.stack_info += [{'scan_number': scan_number,
+                        'start_index': parser.starting_image_index, 'offset_index': offset_index,
+                        'num': num, 'ref_height': parser.vertical_shift}]
 
     def cli(self, **cli_kwargs):
         if cli_kwargs.get('attr_desc') is not None:
@@ -541,54 +520,25 @@ class FlatField(ScanData):
         else:
             attr_desc = ''
         detector = cli_kwargs.get('detector')
-        print(f' -- Configure the location of the {attr_desc}scan data -- ')
+        print(f'\n -- Configure the location of the {attr_desc}scan data -- ')
         self.set_single_attr_cli('spec_file', attr_desc+'SPEC file path')
-        self.scan_number_cli(attr_desc)
-        use_image_range = False
-        if len(self.stack_info):
-            use_image_range = input_yesno(f'Current {attr_desc}image range:\n{self.stack_info}\n'+
-                    f'Keep these settings? (y/n)')
-        if not use_image_range:
-            parser = self.scanparser
-            first_offset = parser.starting_image_offset
-            num_image = parser.get_num_image(detector.id.upper())
-            start_index = parser.starting_image_index-parser.starting_image_offset
-            num_img = input_int(f'Enter the number of {attr_desc}images', ge=1, le=num_image,
-                default=num_image)
-            self.stack_info = [{'scan_number': self.scan_number, 'start_index': start_index,
-                    'offset_index': first_offset, 'num': num_img,
-                    'ref_height': parser.vertical_shift}]
+        self.scan_numbers_cli(attr_desc)
+        for scan_number in self.scan_numbers:
+            self.image_range_cli(scan_number, attr_desc, detector.id)
 
 
 class TomoField(SpecScans):
-#    data_path: constr(strip_whitespace=True, min_length=1)
     theta_range: dict = {}
     stack_info: conlist(item_type=dict, min_items=1) = []
-
-#    @validator('data_path')
-#    def validate_data_path(cls, data_path):
-#        if os.path.splitext(data_path)[1] == '.h5':
-#            file_exists_and_readable(data_path)
-#            try:
-#                if not h5py.is_hdf5(data_path):
-#                    raise(ValueError(f'Invalid h5 file {data_path}'))
-#            except BaseException as e:
-#                print(f'Unexpected {type(e).__name__}: {e}')
-#            else:
-#                return(data_path)
-#        else:
-#            if not os.path.isdir(data_path):
-#                raise(ValueError(f'Invalid file path {data_path}'))
-#            return(data_path)
 
     @validator('theta_range')
     def validate_theta_range(cls, theta_range):
         if len(theta_range) != 4:
             raise(ValueError(f'Invalid theta range {theta_range}'))
-        is_num(theta_range['start'])
-        is_num(theta_range['end'])
-        is_int(theta_range['num'])
-        is_int(theta_range['start_index'])
+        is_num(theta_range['start'], raise_error=True)
+        is_num(theta_range['end'], raise_error=True)
+        is_int(theta_range['num'], raise_error=True)
+        is_int(theta_range['start_index'], raise_error=True)
         if (theta_range['end'] <= theta_range['start'] or theta_range['num'] <= 0 or 
                 theta_range['start_index'] < 0):
             raise(ValueError(f'Invalid theta range {theta_range}'))
@@ -692,8 +642,12 @@ class TomoField(SpecScans):
     def image_range_cli(self, scan_number, attr_desc, detector_id):
         # Parse the available image range
         parser = self.get_scanparser(scan_number)
-        first_offset = parser.starting_image_offset
+        image_offset = parser.starting_image_offset
         num_image = parser.get_num_image(detector_id.upper())
+        have_stack = [n_stack for n_stack, stack in enumerate(self.stack_info)
+                if stack['scan_number'] == scan_number]
+        if len(have_stack) > 1:
+            raise(ValueError('Duplicate scan_numbers in image stack'))
 
         # Select the image set matching the theta range
         num_theta = self.theta_range['num']
@@ -702,19 +656,19 @@ class TomoField(SpecScans):
             raise(ValueError(f'Available {attr_desc}image indices incompatible with theta range:'+
                     f'\n\tNumber of thetas and offset = {num_theta} and {theta_index_start}'+
                     f'\n\tNumber of available images and offset {num_image}'))
-        start_index = parser.starting_image_index-parser.starting_image_offset
         have_stack = False
         for stack in self.stack_info:
             if stack.get('scan_number', None) is not None and stack['scan_number'] == scan_number:
-                stack['start_index'] = start_index
-                stack['offset_index'] = first_offset+theta_index_start
+                stack['start_index'] = parser.starting_image_index
+                stack['offset_index'] = image_offset+theta_index_start
                 stack['num'] = num_theta
                 stack['ref_height'] = parser.vertical_shift
                 have_stack = True
         if not have_stack:
-            self.stack_info.append({'scan_number': scan_number, 'start_index': start_index,
-                    'offset_index': first_offset+theta_index_start, 'num': num_theta,
-                    'ref_height': parser.vertical_shift})
+            self.stack_info += [{'scan_number': scan_number,
+                    'start_index': parser.starting_image_index,
+                    'offset_index': image_offset+theta_index_start, 'num': num_theta,
+                    'ref_height': parser.vertical_shift}]
 
     def cli(self, **cli_kwargs):
         if cli_kwargs.get('attr_desc') is not None:
@@ -723,31 +677,70 @@ class TomoField(SpecScans):
             attr_desc = ''
         station = cli_kwargs.get('station')
         detector = cli_kwargs.get('detector')
-        print(f' -- Configure the location of the {attr_desc}scan data -- ')
+        print(f'\n -- Configure the location of the {attr_desc}scan data -- ')
         self.set_single_attr_cli('spec_file', attr_desc+'SPEC file path')
         self.scan_numbers_cli(attr_desc)
-#        if station in ('smb', 'fast', 'id1a3', 'id3a'):
-#            self.data_path = f'{os.path.dirname(self.spec_file)}/{self.scan_numbers[0]}/nf'
-#        elif station in ('fmb', 'id3b'):
-#            self.data_path = f'{self.spec_file}_{detector.id.upper()}_{self.scan_numbers[0]:03d}.h5'
-        for i, scan_number in enumerate(self.scan_numbers):
+        for scan_number in self.scan_numbers:
             self.theta_range_cli(scan_number, attr_desc, station)
             self.image_range_cli(scan_number, attr_desc, detector.id)
+
+
+class Sample(BaseModel):
+    name: constr(min_length=1)
+    description: Optional[str]
+
+    def cli(self):
+        print('\n -- Configure the sample metadata -- ')
+        self.set_single_attr_cli('name', 'the sample name')
+        self.set_single_attr_cli('description', 'a description of the sample (optional)')
+
+    def construct_nxsample(self, thetas, dark_field, bright_field, tomo_fields):
+        nxsample = NXsample()
+        nxsample.name = self.name
+        nxsample.description = self.description
+
+        # Collect sample rotation angle and translation for all detector images
+        rotation_angle = []
+        z_translation = []
+
+        # Add dark field
+        if dark_field is not None:
+            for stack in dark_field.stack_info:
+                rotation_angle += stack['num']*[0]
+                z_translation += stack['num']*[stack['ref_height']]
+ 
+        # Add bright field
+        for stack in bright_field.stack_info:
+            rotation_angle += stack['num']*[0]
+            z_translation += stack['num']*[stack['ref_height']]
+
+        # Add tomo fields
+        for stack in tomo_fields.stack_info:
+            rotation_angle += list(thetas)
+            z_translation += stack['num']*[stack['ref_height']]
+
+        # Add sample rotation angle and translation to NXsample
+        nxsample.rotation_angle = rotation_angle
+        nxsample.rotation_angle.attrs['units'] = 'degrees'
+        nxsample.z_translation = z_translation
+
+        return(nxsample)
 
 
 class MapConfig(BaseModel):
     title: constr(strip_whitespace=True, min_length=1)
     station: Literal['smb', 'fmb', 'fast', 'id1a3', 'id3a', 'id3b'] = None
+    sample: Sample
     detector: Detector = Detector.construct()
     dark_field: Optional[FlatField]
-    bright_field: FlatField = FlatField.construct()
-    tomo_fields: TomoField = TomoField.construct()
+    bright_field: FlatField
+    tomo_fields: TomoField
     _thetas: list[float] = PrivateAttr()
 
-    @validator('station', pre=True)
-    @classmethod
-    def validate_station(cls, station):
-        return(station.lower())
+#    @validator('station', pre=True)
+#    @classmethod
+#    def validate_station(cls, station):
+#        return(station.lower())
 
 #    @property
 #    def bright_field(self):
@@ -769,12 +762,13 @@ class MapConfig(BaseModel):
             return(self._thetas)
 
     def cli(self):
-        print('\n\n -- Configure a map from a set of SPEC scans (dark, bright, and tomo), '+
+        print('\n -- Configure a map from a set of SPEC scans (dark, bright, and tomo), '+
                 'and / or detector data -- ')
         self.set_single_attr_cli('title', 'title for the map entry')
         self.set_single_attr_cli('station', 'name of the station at which scans were collected '+
                 '(examples: id1a3, id3a, id3b, smb, or fmb)')
         import_scanparser(self.station)
+        self.set_single_attr_cli('sample')
         use_detector_config = False
         if hasattr(self.detector, 'id') and len(self.detector.id):
             use_detector_config = input_yesno(f'Current detector settings:\n{self.detector}\n'+
@@ -783,14 +777,11 @@ class MapConfig(BaseModel):
             have_detector_config = input_yesno(f'Is a detector configuration file available? (y/n)')
             if have_detector_config:
                 detector_config_file = input(f'Enter detector configuration file name: ')
-                self.detector.construct_from_yaml(detector_config_file)
-            else:
+                have_detector_config = self.detector.construct_from_yaml(detector_config_file)
+            if not have_detector_config:
                 self.set_single_attr_cli('detector', 'detector')
         have_dark_field = input_yesno(f'Are Dark field images available? (y/n)')
         if have_dark_field:
-            attr = getattr(self, 'dark_field', None)
-            if attr is None:
-                self.dark_field = FlatField.construct()
             self.set_single_attr_cli('dark_field', 'Dark field', chain_attr_desc=True,
                     station=self.station, detector=self.detector)
         self.set_single_attr_cli('bright_field', 'Bright field', chain_attr_desc=True,
@@ -799,94 +790,69 @@ class MapConfig(BaseModel):
                 station=self.station, detector=self.detector)
 
     def construct_nxentry(self, nxroot, logger=logging.getLogger(__name__)):
-        t0 = time()
         # Construct base NXentry
         nxentry = NXentry()
 
         # Add NXentry to the NXroot
         nxroot[self.title] = nxentry
+        nxroot.attrs['default'] = self.title
+        nxentry.definition = 'NXtomo'
+#        nxentry.attrs['default'] = 'data'
+
+        # Add NXinstrument to the NXentry
+        nxinstrument = NXinstrument()
+        nxentry.instrument = nxinstrument
+
+        # Add NXsource to the NXinstrument
+        nxsource = NXsource()
+        nxinstrument.source = nxsource
+        nxsource.type = 'Synchrotron X-ray Source'
+        nxsource.name = 'CHESS'
+        nxsource.probe = 'x-ray'
+ 
+        # Tag the NXsource with the station (as an attribute)
+        nxsource.attrs['station'] = self.station
+
+        # Add NXdetector to the NXinstrument
+        nxinstrument.detector = self.detector.construct_nxdetector(self.station, self.dark_field,
+                self.bright_field, self.tomo_fields)
 
         # Add NXsample to NXentry
-#FIX        nxentry.sample = self.sample.construct_nxobject()
+        nxentry.sample = self.sample.construct_nxsample(self.thetas, self.dark_field,
+                self.bright_field, self.tomo_fields)
 
-        # Add NXinstrument to NXentry
-        nxentry.instrument = NXinstrument()
-
-        # Add an NXdetector to the NXinstrument
-        nxentry.instrument[self.detector.id] = self.detector.construct_nxdetector()
-
-        # Tag the NXentry with the station (as an attribute)
-        nxentry.attrs['station'] = self.station
-
-        # Add independent dimensions & their coordinate values to NXentry as an NXdata
-        nxentry.independent_dimensions = NXdata()
-        nxentry.independent_dimensions.attrs['axes'] = ['theta']
-        nxentry.independent_dimensions['theta'] = NXfield(self.thetas)
-        nxentry.independent_dimensions['theta'].units = 'degrees'
-        nxentry.independent_dimensions['theta'].attrs['long_name'] = f'theta (degrees)'
-
-        # Since independent dimensions are reused for all signals in this map,
-        # define a convenience function for linking to their values.
-        def link_independent_dimensions(nxdata_path):
-            for indep_dim in self.independent_dimensions:
-                nxroot[nxdata_path].makelink(
-                        nxentry.independent_dimensions[indep_dim.label])
-                nxroot[nxdata_path].attrs[f'{indep_dim.label}_indices'] = \
-                        nxentry.independent_dimensions.attrs[f'{indep_dim.label}_indices']
+        # Add NXdata to NXentry
+        nxdata = NXdata()
+        nxentry.data = nxdata
+        nxdata.makelink(nxentry.instrument.detector.data)
+        nxdata.makelink(nxentry.instrument.detector.image_key)
+        nxdata.makelink(nxentry.sample.rotation_angle)
+        nxdata.makelink(nxentry.sample.z_translation)
+#        nxdata.attrs['axes'] = ['field', 'row', 'column']
+#        nxdata.attrs['field_indices'] = 0
+#        nxdata.attrs['row_indices'] = 1
+#        nxdata.attrs['column_indices'] = 2
 
         # Add a NXcollection to the base NXentry to hold metadata about the spec scans in the map
-        nxentry.spec_scans = NXcollection()
-
-        # Add the dark field
-        if hasattr(self, 'bright_field'):
-            print(f'bright_field:\n{self.bright_field}')
-            return(nxentry)
-            # Add a NXcollection to the NXcollection for all the scans in a single spec file
-            scanparser = bright_field.scanparser(bright_field.scan_number)
-            nxentry.spec_scans[scanparser.scan_name] = bright_field.construct_nxcollection(detector)
-                t1 = time()
-                entry_name = f'{scanparser.scan_name}'
-                # Use multiple threads to fill in arrays set up to contain point-by-point scan data
-                def fill_data(scan_step_index:int):
-                    index = scans.get_index(scan_number, scan_step_index, self)
-                    logger.debug(f'Adding data to nexus arrays from scan {scanparser.scan_title} step {scan_step_index}')
-                    # Fill in the scalar values arrays
-                    if self.signals.scalar_values is not None:
-                        for scalar_values in self.signals.scalar_values:
-                            nxentry[scalar_values.label][index] = scalar_values.get_value(scans, scan_number, scan_step_index)
-                    # Fill in processed data
-                    for scatter_type in ('saxs', 'waxs'):
-                        scatter_config = getattr(self.signals, scatter_type, None)
-                        if scatter_config is not None:
-                            # Fill in paths to raw detector data
-                            for detector in scatter_config.detectors:
-                                nxentry.spec_scans[entry_name].instrument[detector.prefix].raw_data_files[scan_step_index] = scanparser.get_detector_data_file(detector.prefix, scan_step_index)
-                            # Fill in the integrated data arrays
-                            for integration_type in scatter_config.integration.configured_integration_types:
-                                integration_config = getattr(scatter_config.integration, integration_type)
-                                nxentry[scatter_type][integration_type].data.I[index] = integration_config.get_integrated_data(scatter_config.detectors, scans, scan_number, scan_step_index)
-                # Create a pool of threads that run fill_data for each scan point.
-                # Run the 0th scan step first so threads can access certain integrators, etc.
-                # through the cache.
-                fill_data(0)
-                with ThreadPool(processes=4) as pool:
-                    pool.map(fill_data, range(1, scanparser.spec_scan_npts))
-                logger.info(f'Filled nexus data arrays for scan {scanparser.scan_title} in {time()-t1:.2f} seconds.')
-        logger.info(f'Constructed an NXentry for {self.title}: {time()-t0:.2f} seconds')
-        return(nxentry)
+#        nxentry.spec_scans = NXcollection()
+#        if self.dark_field is not None:
+#        for scans in self.dark_field:
 
 
 class TOMOWorkflow(BaseModel):
     sample_maps: conlist(item_type=MapConfig, min_items=1) = [MapConfig.construct()]
+
     def cli(self):
-        print(' -- Configure a map -- ')
+        print('\n -- Configure a map -- ')
         self.set_list_attr_cli('sample_maps', 'sample map')
+
     def construct_nxfile(self, filename, mode='w-', logger=logging.getLogger(__name__)):
         nxroot = NXroot()
         for sample_map in self.sample_maps:
             import_scanparser(sample_map.station)
             sample_map.construct_nxentry(nxroot, logger=logger)
         nxroot.save(filename, mode=mode)
+
     def write_to_nexus(self, filename, logger=logging.getLogger(__name__)):
         t0 = time()
         self.construct_nxfile(filename, mode='w', logger=logger)

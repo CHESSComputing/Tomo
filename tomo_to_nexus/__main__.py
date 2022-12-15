@@ -44,9 +44,8 @@ construct_parser.add_argument('-o', '--output_file',
 
 # VALIDATE
 def validate(args:list, logger=logging.getLogger(__name__)) -> bool:
-    raise(ValueError('validate not tested'))
     try:
-#        wf = Workflow.construct_from_file(args.input_file, logger=logger)
+        wf = Workflow.construct_from_file(args.input_file, logger=logger)
         logger.info(f'Success: {args.input_file} represents a valid TOMOWorkflow configuration.')
         return(True)
     except BaseException as e:
@@ -66,9 +65,8 @@ validate_parser.add_argument('input_file',
 
 # CONVERT
 def convert(args:list, logger=logging.getLogger(__name__)) -> None:
-    raise(ValueError('convert not tested'))
-#    wf = Workflow.construct_from_file(args.input_file, logger=logger)
-#    wf.write_to_file(args.output_file, force_overwrite=args.force_overwrite, logger=logger)
+    wf = Workflow.construct_from_file(args.input_file, logger=logger)
+    wf.write_to_file(args.output_file, force_overwrite=args.force_overwrite, logger=logger)
 
 convert_parser = subparsers.add_parser('convert', help='''Convert one TOMO workflow
         representation to another. File format of both input and output files will be
