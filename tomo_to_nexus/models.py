@@ -285,11 +285,9 @@ class Detector(BaseModel):
     pixel_size: conlist(item_type=confloat(gt=0), min_items=1, max_items=2)
     lens_magnification: confloat(gt=0) = 1.0
 
+    @property
     def get_pixel_size(self):
-        if hasattr(self, 'pixel_size'):
-            return(self.pixel_size/self.lens_magnification)
-        else:
-            return(None)
+        return(list(np.asarray(self.pixel_size)/self.lens_magnification))
 
     def construct_from_yaml(self, filename):
         try:
@@ -321,12 +319,13 @@ class Detector(BaseModel):
     def construct_nxdetector(self):
         nxdetector = NXdetector()
         nxdetector.local_name = self.prefix
-        if len(self.pixel_size) ==1:
-            nxdetector.x_pixel_size = self.pixel_size[0]
-            nxdetector.y_pixel_size = self.pixel_size[0]
+        pixel_size = self.get_pixel_size
+        if len(pixel_size) == 1:
+            nxdetector.x_pixel_size = pixel_size[0]
+            nxdetector.y_pixel_size = pixel_size[0]
         else:
-            nxdetector.x_pixel_size = self.pixel_size[0]
-            nxdetector.y_pixel_size = self.pixel_size[1]
+            nxdetector.x_pixel_size = pixel_size[0]
+            nxdetector.y_pixel_size = pixel_size[1]
         nxdetector.x_pixel_size.attrs['units'] = 'mm'
         nxdetector.y_pixel_size.attrs['units'] = 'mm'
         return(nxdetector)
@@ -374,6 +373,23 @@ class SpecScans(BaseModel):
             is_int(scan_info['starting_image_offset'], ge=0, lt=scan_info['num_image'],
                     raise_error=True)
         return(stack_info)
+
+    @classmethod
+    def construct_from_nxcollection(cls, nxcollection:NXcollection):
+        config = {}
+        config['spec_file'] = nxcollection.attrs['spec_file']
+        scan_numbers = []
+        stack_info = []
+        for nxsubentry_name, nxsubentry in nxcollection.items():
+            scan_number = int(nxsubentry_name.split('_')[-1])
+            scan_numbers.append(scan_number)
+            stack_info.append({'scan_number': scan_number,
+                    'starting_image_offset': int(nxsubentry.instrument.detector.frame_start_number),
+                    'num_image': len(nxsubentry.independent_dimensions.rotation_angle),
+                    'ref_height': float(nxsubentry.sample.z_translation)})
+        config['scan_numbers']= sorted(scan_numbers)
+        config['stack_info']= stack_info
+        return(cls(**config))
 
     @property
     def available_scan_numbers(self):
@@ -444,6 +460,8 @@ class SpecScans(BaseModel):
         parser = self.get_scanparser(self.scan_numbers[0])
         nxcollection.attrs['date'] = parser.spec_scan.file_date
         for scan_number in self.scan_numbers:
+            # Get scan info
+            scan_info = self.stack_info[self.get_scan_index(scan_number)]
             # Add an NXsubentry to the NXcollection for each scan
             entry_name = f'scan_{scan_number}'
             nxsubentry = NXsubentry()
@@ -452,6 +470,11 @@ class SpecScans(BaseModel):
             nxsubentry.start_time = parser.spec_scan.date
             nxsubentry.spec_command = parser.spec_command
             # Add an NXdata for independent dimensions to the scan's NXsubentry
+            num_image = scan_info['num_image']
+            if thetas is None:
+                thetas = num_image*[0.0]
+            else:
+                assert(num_image == len(thetas))
             nxsubentry.independent_dimensions = NXdata()
             nxsubentry.independent_dimensions.rotation_angle = thetas
             nxsubentry.independent_dimensions.rotation_angle.units = 'degrees'
@@ -459,16 +482,12 @@ class SpecScans(BaseModel):
             nxsubentry.instrument = NXinstrument()
             # Add an NXdetector to the NXinstrument to the scan's NXsubentry
             nxsubentry.instrument.detector = detector.construct_nxdetector()
+            nxsubentry.instrument.detector.frame_start_number = scan_info['starting_image_offset']
             nxsubentry.instrument.detector.image_key = field_name
             # Add an NXsample to the scan's NXsubentry
             nxsubentry.sample = NXsample()
-            # Add the frame start number of z-translation to the appropriate places
-            for scan_info in self.stack_info:
-                if scan_info['scan_number'] == scan_number:
-                    nxsubentry.instrument.detector.frame_start_number = \
-                            scan_info['starting_image_offset']
-                    nxsubentry.sample.z_translation = scan_info['ref_height']
-                    break
+            nxsubentry.sample.z_translation = scan_info['ref_height']
+            nxsubentry.sample.z_translation.units = 'mm'
         return(nxcollection)
 
 
@@ -522,7 +541,6 @@ class FlatField(SpecScans):
 
 class TomoField(SpecScans):
     theta_range: dict = {}
-    stack_info: conlist(item_type=dict, min_items=1) = []
 
     @validator('theta_range')
     def validate_theta_range(cls, theta_range):
@@ -677,6 +695,20 @@ class TomoField(SpecScans):
 class Sample(BaseModel):
     name: constr(min_length=1)
     description: Optional[str]
+    rotation_angles: Optional[list]
+    z_translations: Optional[list]
+
+    @classmethod
+    def construct_from_nxsample(cls, nxsample:NXsample):
+        config = {}
+        config['name'] = nxsample.name.nxdata
+        if 'description' in nxsample:
+            config['description'] = nxsample.description.nxdata
+        if 'rotation_angle' in nxsample:
+            config['rotation_angle'] = nxsample.rotation_angle.nxdata
+        if 'z_translation' in nxsample:
+            config['z_translation'] = nxsample.z_translation.nxdata
+        return(cls(**config))
 
     def cli(self):
         print('\n -- Configure the sample metadata -- ')
@@ -696,18 +728,16 @@ class MapConfig(BaseModel):
     _field_types = ({'name': 'dark_field', 'image_key': 2}, {'name': 'bright_field',
             'image_key': 1}, {'name': 'tomo_fields', 'image_key': 0})
 
-#    @validator('station', pre=True)
-#    @classmethod
-#    def validate_station(cls, station):
-#        return(station.lower())
-
-#    @property
-#    def bright_field(self):
-#        return(self.bright_field)
-
-#    @property
-#    def tomo_fields(self):
-#        return(self.tomo_fields)
+    @classmethod
+    def construct_from_nxentry(cls, nxentry:NXentry):
+        config = {}
+        config['title'] = nxentry.nxname
+        config['station'] = nxentry.instrument.source.attrs['station']
+        config['sample'] = Sample.construct_from_nxsample(nxentry['sample'])
+        for nxobject_name, nxobject in nxentry.spec_scans.items():
+            if isinstance(nxobject, NXcollection):
+                config[nxobject_name] = SpecScans.construct_from_nxcollection(nxobject)
+        return(cls(**config))
 
 #FIX cache?
     @property
@@ -752,17 +782,17 @@ class MapConfig(BaseModel):
         # Construct base NXentry
         nxentry = NXentry()
 
-        # Add NXentry to the NXroot
+        # Add an NXentry to the NXroot
         nxroot[self.title] = nxentry
         nxroot.attrs['default'] = self.title
         nxentry.definition = 'NXtomo'
 #        nxentry.attrs['default'] = 'data'
 
-        # Add NXinstrument to the NXentry
+        # Add an NXinstrument to the NXentry
         nxinstrument = NXinstrument()
         nxentry.instrument = nxinstrument
 
-        # Add NXsource to the NXinstrument
+        # Add an NXsource to the NXinstrument
         nxsource = NXsource()
         nxinstrument.source = nxsource
         nxsource.type = 'Synchrotron X-ray Source'
@@ -772,10 +802,10 @@ class MapConfig(BaseModel):
         # Tag the NXsource with the station (as an attribute)
         nxsource.attrs['station'] = self.station
 
-        # Add NXdetector to the NXinstrument (don't fill in data fields yet)
+        # Add an NXdetector to the NXinstrument (don't fill in data fields yet)
         nxinstrument.detector = self.detector.construct_nxdetector()
 
-        # Add NXsample to NXentry (don't fill in data fields yet)
+        # Add an NXsample to NXentry (don't fill in data fields yet)
         nxsample = NXsample()
         nxentry.sample = nxsample
         nxsample.name = self.sample.name
@@ -817,6 +847,7 @@ class MapConfig(BaseModel):
                 if thetas is None:
                     rotation_angles += scan_info['num_image']*[0.0]
                 else:
+                    assert(num_image == len(thetas))
                     rotation_angles += thetas
                 z_translations += scan_info['num_image']*[scan_info['ref_height']]
         # Add image data to NXdetector
@@ -827,11 +858,12 @@ class MapConfig(BaseModel):
         nxsample.rotation_angle = rotation_angles
         nxsample.rotation_angle.attrs['units'] = 'degrees'
         nxsample.z_translation = z_translations
+        nxsample.z_translation.attrs['units'] = 'mm'
 
-        # Add NXdata to NXentry
+        # Add an NXdata to NXentry
         nxdata = NXdata()
         nxentry.data = nxdata
-        nxdata.makelink(nxentry.instrument.detector.data)
+        nxdata.makelink(nxentry.instrument.detector.data, name='data')
         nxdata.makelink(nxentry.instrument.detector.image_key)
         nxdata.makelink(nxentry.sample.rotation_angle)
         nxdata.makelink(nxentry.sample.z_translation)
@@ -843,6 +875,15 @@ class MapConfig(BaseModel):
 
 class TOMOWorkflow(BaseModel):
     sample_maps: conlist(item_type=MapConfig, min_items=1) = [MapConfig.construct()]
+
+    @classmethod
+    def construct_from_nexus(cls, filename):
+        nxroot = nxload(filename)
+        sample_maps = []
+        config = {'sample_maps':sample_maps}
+        for nxentry_name, nxentry in nxroot.items():
+            sample_maps.append(MapConfig.construct_from_nxentry(nxentry))
+        return(cls(**config))
 
     def cli(self):
         print('\n -- Configure a map -- ')
