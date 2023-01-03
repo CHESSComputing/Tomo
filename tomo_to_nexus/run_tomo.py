@@ -25,9 +25,9 @@ except:
     pass
 
 from msnctools.fit import Fit
-from general import illegal_value, is_int, is_index_range, input_int, input_num, input_yesno, \
-        input_menu, draw_mask_1d, selectImageBounds, selectOneImageBound, clearImshow, \
-        quickImshow, clearPlot, quickPlot
+from msnctools.general import illegal_value, is_int, is_index_range, input_int, input_num, \
+        input_yesno, input_menu, draw_mask_1d, selectImageBounds, selectOneImageBound, \
+        clearImshow, quickImshow, clearPlot, quickPlot
 
 from .models import TOMOWorkflow
 from .__version__ import __version__
@@ -126,7 +126,8 @@ class Tomo:
         self.logger.debug('Find the calibrated center axis info')
 
         # Check if reduced data is available
-        if 'reduced_data' not in self.nxentry or not self.nxentry.reduced_data.attrs['success']:
+        if ('reduced_data' not in self.nxentry or not self.nxentry.reduced_data.attrs['success'] or
+                'reduced_data' not in self.nxentry.data):
             raise(KeyError(f'Unable to find valid reduced data in {self.nxentry}.'))
 
         # Create an NXprocess to store calibrated center axis info (meta)data
@@ -142,19 +143,21 @@ class Tomo:
         #   reduced data axes order: stack,row,theta,column
         #   Note: Nexus cannot follow a link if the data it points to is too big,
         #         so get the data from the actual place, not from self.nxentry.data
-        num_tomo_stacks = self.nxentry.data.reduced_data.shape[0]
+        num_tomo_stacks = self.nxentry.reduced_data.data.tomo_fields.shape[0]
         if num_tomo_stacks == 1:
             center_stack_index = 0
-            center_stack = np.asarray(self.nxentry.reduce_data.data.reduced_data[0])
+            center_stack = np.asarray(self.nxentry.reduced_data.data.tomo_fields[0])
             if not center_stack.size:
                 raise KeyError('Unable to load the required reduced tomography stack')
+            default = 'n'
         else:
             center_stack_index = input_int('\nEnter tomography stack index to calibrate the '
                     'center axis', ge=0, le=num_tomo_stacks-1, default=int(num_tomo_stacks/2))
             center_stack = \
-                    np.asarray(self.nxentry.reduce_data.data.reduced_data[center_stack_index])
+                    np.asarray(self.nxentry.reduced_data.data.tomo_fields[center_stack_index])
             if not center_stack.size:
                 raise KeyError('Unable to load the required reduced tomography stack')
+            default = 'y'
 
         # Get thetas (in degrees)
         thetas = np.asarray(self.nxentry.reduced_data.rotation_angle)
@@ -175,15 +178,16 @@ class Tomo:
 
         # Lower row center
         # center_stack order: row,theta,column
-        lower_row = selectOneImageBound(center_stack[:,0,:], 0, 0, title=f'theta={thetas[0]}',
-                bound_name='row index to find lower center')
+        lower_row = selectOneImageBound(center_stack[:,0,:], 0, bound=0, title=f'theta={thetas[0]}',
+                bound_name='row index to find lower center', default=default)
         lower_center_offset = self._findCenterOnePlane(center_stack[lower_row,:,:], lower_row,
                 thetas, eff_pixel_size, cross_sectional_dim, num_core=self.num_core)
         self.logger.info(f'lower_center_offset = {lower_center_offset:.2f}')
 
         # Upper row center
-        upper_row = selectOneImageBound(center_stack[:,0,:], 0, center_stack.shape[0]-1,
-                title=f'theta={thetas[0]}', bound_name='row index to find upper center')
+        upper_row = selectOneImageBound(center_stack[:,0,:], 0, bound=center_stack.shape[0]-1,
+                title=f'theta={thetas[0]}', bound_name='row index to find upper center',
+                default=default)
         upper_center_offset = self._findCenterOnePlane(center_stack[upper_row,:,:], upper_row,
                 thetas, eff_pixel_size, cross_sectional_dim, num_core=self.num_core)
         self.logger.info(f'upper_center_offset = {upper_center_offset:.2f}')
@@ -203,7 +207,8 @@ class Tomo:
         logging.debug('Reconstruct the tomography stacks')
 
         # Check if reduced data is available
-        if 'reduced_data' not in self.nxentry or not self.nxentry.reduced_data.attrs['success']:
+        if ('reduced_data' not in self.nxentry or not self.nxentry.reduced_data.attrs['success'] or
+                'reduced_data' not in self.nxentry.data):
             raise(KeyError(f'Unable to find valid reduced data in {self.nxentry}.'))
 
         # Check if calibrated center axis info is available
@@ -241,10 +246,10 @@ class Tomo:
         else:
             basetitle = 'recon stack fullres'
         load_error = False
-        num_tomo_stacks = self.nxentry.data.reduced_data.shape[0]
+        num_tomo_stacks = self.nxentry.reduced_data.data.tomo_fields.shape[0]
         tomo_recon_stacks = num_tomo_stacks*[np.array([])]
         for i in range(num_tomo_stacks):
-            tomo_stack = np.asarray(self.nxentry.reduced_data.data.reduced_data[i])
+            tomo_stack = np.asarray(self.nxentry.reduced_data.data.tomo_fields[i])
             if not tomo_stack.size:
                 raise(KeyError(f'Unable to load tomography stack {i} for reconstruction'))
             assert(0 <= lower_row < upper_row < tomo_stack.shape[0])
@@ -289,7 +294,8 @@ class Tomo:
         """
         # Check if reconstructed images data is available
         if ('reconstructed_image_data' not in self.nxentry or
-                not self.nxentry.reconstructed_image_data.attrs['success']):
+                not self.nxentry.reconstructed_image_data.attrs['success'] or
+                'reconstructed_images' not in self.nxentry.data):
             raise(KeyError(f'Unable to find valid reconstructed image data in {self.nxentry}.'))
 
         # Create an NXprocess to store combined image reconstruction (meta)data
@@ -315,7 +321,8 @@ class Tomo:
         tomosum = 0
         [tomosum := tomosum+np.sum(tomo_recon_stacks[i], axis=(0,2))
                 for i in range(num_tomo_stacks)]
-        if not input_yesno('\nDo you want to change the image x-bounds (y/n)?', 'y'):
+        select_x_bounds = input_yesno('\nDo you want to change the image x-bounds (y/n)?', 'y')
+        if not select_x_bounds:
             x_bounds = [0, tomosum.size]
         else:
             accept = False
@@ -338,7 +345,8 @@ class Tomo:
         tomosum = 0
         [tomosum := tomosum+np.sum(tomo_recon_stacks[i], axis=(0,1))
                 for i in range(num_tomo_stacks)]
-        if not input_yesno('\nDo you want to change the image y-bounds (y/n)?', 'y'):
+        select_y_bounds = input_yesno('\nDo you want to change the image y-bounds (y/n)?', 'y')
+        if not select_y_bounds:
             y_bounds = [0, tomosum.size]
         else:
             accept = False
@@ -374,7 +382,8 @@ class Tomo:
 
         # Selecting z bounds (in xy-plane)
         tomosum = np.sum(tomo_recon_combined, axis=(1,2))
-        if not input_yesno('\nDo you want to change the image z-bounds (y/n)?', 'n'):
+        select_z_bounds = input_yesno('\nDo you want to change the image z-bounds (y/n)?', 'n')
+        if not select_z_bounds:
             z_bounds = [0, tomosum.size]
         else:
             accept = False
@@ -414,6 +423,12 @@ class Tomo:
         nxprocess.attrs['default'] = 'data'
         self.nxentry.data.makelink(nxprocess.data.combined_image, name='combined_image')
         self.nxentry.data.attrs['signal'] = 'combined_image'
+        if select_x_bounds:
+            nxprocess.x_bounds = x_bounds
+        if select_y_bounds:
+            nxprocess.y_bounds = y_bounds
+        if select_z_bounds:
+            nxprocess.z_bounds = z_bounds
 
         # Succesfull image reconstruction
         nxprocess.attrs['success'] = True
@@ -1026,7 +1041,7 @@ def run_tomo(filename:str, correction_modes:list[str], force_overwrite=False,
         tomo = Tomo(nxentry, logger, force_overwrite=force_overwrite, num_core=num_core)
 
         # Generate reduced tomography images
-        if 'reduce_data' in correction_modes or 'all' in correction_modes:
+        if 'reduced_data' in correction_modes or 'all' in correction_modes:
             tomo.genReducedData()
 
         # Find rotation axis centers for the tomography stacks.

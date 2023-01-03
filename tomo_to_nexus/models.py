@@ -503,27 +503,28 @@ class FlatField(SpecScans):
             scan_index = self.get_scan_index(scan_number)
 
             # Select the image set
-            print(f'Available good image set index range: [{image_offset}, {num_image-1}]')
+            last_image_index = image_offset+num_image-1
+            print(f'Available good image set index range: [{image_offset}, {last_image_index}]')
             image_set_approved = False
             if scan_index is not None:
                 scan_info = stack_info[scan_index]
                 print(f'Current starting image offset and number of images: '+
-                        f'{scan_info["starting_offset_index"]} and {scan_info["num_image"]}')
+                        f'{scan_info["starting_image_offset"]} and {scan_info["num_image"]}')
                 image_set_approved = input_yesno(f'Accept these values (y/n)?', 'y')
             if not image_set_approved:
                 while not image_set_approved:
                     offset = input_int(f'Enter the starting image offset', ge=image_offset,
-                            le=num_image-1, default=image_offset)
-                    num = input_int(f'Enter the number of images', ge=1, le=num_image-offset,
-                            default=num_image-offset)
+                            le=last_image_index-1, default=image_offset)
+                    num = input_int(f'Enter the number of images', ge=1,
+                            le=last_image_index-offset+1, default=last_image_index-offset+1)
                     print(f'Current starting image offset and number of images: {offset} and {num}')
                     image_set_approved = input_yesno(f'Accept these values (y/n)?', 'y')
                 if scan_index is not None:
-                    scan_info['starting_offset_index'] = offset
+                    scan_info['starting_image_offset'] = offset
                     scan_info['num_image'] = num
                     scan_info['ref_height'] = parser.vertical_shift
                 else:
-                    stack_info.append({'scan_number': scan_number, 'starting_offset_index': offset,
+                    stack_info.append({'scan_number': scan_number, 'starting_image_offset': offset,
                             'num_image': num, 'ref_height': parser.vertical_shift})
         self.stack_info = stack_info
 
@@ -668,12 +669,12 @@ class TomoField(SpecScans):
                         f'\n\tNumber of available images {num_image}'))
             if scan_index is not None:
                 scan_info = stack_info[scan_index]
-                scan_info['starting_offset_index'] = image_offset+theta_index_start
+                scan_info['starting_image_offset'] = image_offset+theta_index_start
                 scan_info['num_image'] = num_theta
                 scan_info['ref_height'] = parser.vertical_shift
             else:
                 stack_info.append({'scan_number': scan_number,
-                        'starting_offset_index': image_offset+theta_index_start,
+                        'starting_image_offset': image_offset+theta_index_start,
                         'num_image': num_theta, 'ref_height': parser.vertical_shift})
         self.stack_info = stack_info
 
