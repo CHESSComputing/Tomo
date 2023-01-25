@@ -25,7 +25,8 @@ except:
     pass
 
 from msnctools.fit import Fit
-from msnctools.general import illegal_value, is_int, is_index_range, input_int, input_num, \
+#from msnctools.general import illegal_value, is_int, is_index_range, input_int, input_num, \
+from general import illegal_value, is_int, is_index_range, input_int, input_num, \
         input_yesno, input_menu, draw_mask_1d, selectImageBounds, selectOneImageBound, \
         clearImshow, quickImshow, clearPlot, quickPlot
 
@@ -1041,7 +1042,7 @@ def run_tomo(filename:str, correction_modes:list[str], force_overwrite=False,
         tomo = Tomo(nxentry, logger, force_overwrite=force_overwrite, num_core=num_core)
 
         # Generate reduced tomography images
-        if 'reduced_data' in correction_modes or 'all' in correction_modes:
+        if 'reduce_data' in correction_modes or 'all' in correction_modes:
             tomo.genReducedData()
 
         # Find rotation axis centers for the tomography stacks.
