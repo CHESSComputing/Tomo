@@ -832,11 +832,9 @@ class MapConfig(BaseModel):
             else:
                 thetas = None
             # Add the scans in a single spec file
-            parser = field.get_scanparser(field.scan_numbers[0])
             nxspec_scans[field_name] = field.construct_nxcollection(image_key, thetas,
                     self.detector)
             for scan_number in field.scan_numbers:
-                parser = field.get_scanparser(scan_number)
                 scan_info = field.stack_info[field.get_scan_index(scan_number)]
                 image_offset = scan_info['starting_image_offset']
                 num_image = scan_info['num_image']

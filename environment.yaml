@@ -9,7 +9,7 @@ dependencies:
   - h5py==3.6.0
   - lmfit==1.0.3
   - matplotlib==3.5.2
-  - msnctools=2022.3.*
+  - msnctools=2023.1.*
   - nexusformat
   - pip==22.3.1
   - pydantic
