@@ -1,13 +1,18 @@
-import yaml
+#!/usr/bin/env python3
+
+import logging
+logger=logging.getLogger(__name__)
 
 import logging
 
-import os
-import numpy as np
 try:
     import h5py
 except:
     pass
+import numpy as np
+import os
+import yaml
+
 from functools import cache
 from pathlib import PosixPath
 from pydantic import validator, ValidationError, conint, confloat, constr, \
@@ -20,8 +25,7 @@ from typing_extensions import TypedDict
 from pyspec.file.spec import FileSpec
 
 from msnctools.general import is_int, is_num, input_int, input_int_list, input_num, input_yesno, \
-        input_menu, index_nearest, string_to_list, file_exists_and_readable, findImageFiles, \
-        selectImageRange
+        input_menu, index_nearest, string_to_list, file_exists_and_readable
 
 
 def import_scanparser(station):
@@ -34,7 +38,7 @@ def import_scanparser(station):
         #from msnctools.scanparsers import FMBRotationScanParser
         globals()['ScanParser'] = FMBRotationScanParser
     else:
-        raise(RuntimeError(f'Invalid station: {station}'))
+        raise RuntimeError(f'Invalid station: {station}')
 
 @cache
 def get_available_scan_numbers(spec_file:str):
@@ -43,7 +47,12 @@ def get_available_scan_numbers(spec_file:str):
     for scan_number in scan_numbers.copy():
         try:
             parser = ScanParser(spec_file, scan_number)
-            scan_type = parser.get_scan_type()
+            try:
+                scan_type = parser.get_scan_type()
+            except:
+                scan_numbers.remove(scan_number)
+                scan_type = None
+                pass
         except:
             scan_numbers.remove(scan_number)
     return(scan_numbers)
@@ -73,13 +82,13 @@ class BaseModel(PydanticBaseModel):
             with open(filename, 'r') as infile:
                 indict = yaml.load(infile, Loader=yaml.CLoader)
         except:
-            raise(ValueError(f'Could not load a dictionary from {filename}'))
+            raise ValueError(f'Could not load a dictionary from {filename}')
         else:
             obj = cls(**indict)
             return(obj)
 
     @classmethod
-    def construct_from_file(cls, filename, logger=logging.getLogger(__name__)):
+    def construct_from_file(cls, filename):
         file_exists_and_readable(filename)
         filename = os.path.abspath(filename)
         fileformat = os.path.splitext(filename)[1]
@@ -96,7 +105,7 @@ class BaseModel(PydanticBaseModel):
             return(obj)
         else:
             logger.error(f'Unsupported file extension for constructing a model: {fileformat}')
-            raise(TypeError(f'Unrecognized file extension: {fileformat}'))
+            raise TypeError(f'Unrecognized file extension: {fileformat}')
 
     def dict_for_yaml(self, exclude_fields=[]):
         yaml_dict = {}
@@ -119,7 +128,7 @@ class BaseModel(PydanticBaseModel):
                     continue
         return(yaml_dict)
 
-    def write_to_yaml(self, filename=None, logger=logging.getLogger(__name__)):
+    def write_to_yaml(self, filename=None):
         yaml_dict = self.dict_for_yaml()
         if filename is None:
             logger.info('Printing yaml representation here:\n'+
@@ -134,20 +143,19 @@ class BaseModel(PydanticBaseModel):
                 logger.info('Printing yaml representation here:\n'+
                         f'{yaml.dump(yaml_dict, sort_keys=False)}')
 
-    def write_to_file(self, filename, force_overwrite=False, logger=logging.getLogger(__name__)):
+    def write_to_file(self, filename, force_overwrite=False):
         file_writeable, fileformat = self.output_file_valid(filename,
-                force_overwrite=force_overwrite, logger=logger)
+                force_overwrite=force_overwrite)
         if fileformat == 'yaml':
             if file_writeable:
-                self.write_to_yaml(filename=filename, logger=logger)
+                self.write_to_yaml(filename=filename)
             else:
-                self.write_to_yaml(logger=logger)
+                self.write_to_yaml()
         elif fileformat == 'nexus':
             if file_writeable:
-                self.write_to_nexus(filename=filename, logger=logger)
+                self.write_to_nexus(filename=filename)
 
-    def output_file_valid(self, filename, force_overwrite=False,
-            logger=logging.getLogger(__name__)):
+    def output_file_valid(self, filename, force_overwrite=False):
         filename = os.path.abspath(filename)
         fileformat = os.path.splitext(filename)[1]
         yaml_extensions = ('.yaml','.yml')
@@ -200,7 +208,7 @@ class BaseModel(PydanticBaseModel):
                     attr = self.__fields__[attr_name].type_.construct()
                     continue
                 except KeyboardInterrupt as e:
-                    raise(e)
+                    raise e
                 except BaseException as e:
                     print(f'{type(e).__name__}: {e}')
                     print(f'Removing {attr_desc} configuration')
@@ -211,7 +219,7 @@ class BaseModel(PydanticBaseModel):
                 except ValidationError as e:
                     print(e)
                 except KeyboardInterrupt as e:
-                    raise(e)
+                    raise e
                 except BaseException as e:
                     print(f'{type(e).__name__}: {e}')
                 else:
@@ -234,7 +242,7 @@ class BaseModel(PydanticBaseModel):
                 except ValidationError as e:
                     print(e)
                 except KeyboardInterrupt as e:
-                    raise(e)
+                    raise e
                 except BaseException as e:
                     print(f'Unexpected {type(e).__name__}: {e}')
                 else:
@@ -255,7 +263,7 @@ class BaseModel(PydanticBaseModel):
                     except ValidationError as e:
                         print(e)
                     except KeyboardInterrupt as e:
-                        raise(e)
+                        raise e
                     except BaseException as e:
                         print(f'{type(e).__name__}: {e}')
                     else:
@@ -275,7 +283,7 @@ class BaseModel(PydanticBaseModel):
                 print(f'Removing last {attr_desc} configuration from the list')
                 attr.pop()
             except KeyboardInterrupt as e:
-                raise(e)
+                raise e
             except BaseException as e:
                 print(f'{type(e).__name__}: {e}')
                 print(f'Removing last {attr_desc} configuration from the list')
@@ -355,7 +363,7 @@ class SpecScans(BaseModel):
             spec_file = os.path.abspath(spec_file)
             sspec_file = FileSpec(spec_file)
         except:
-            raise(ValueError(f'Invalid SPEC file {spec_file}'))
+            raise ValueError(f'Invalid SPEC file {spec_file}')
         else:
             return(spec_file)
 
@@ -367,7 +375,7 @@ class SpecScans(BaseModel):
             for scan_number in scan_numbers:
                 scan = spec_scans.get_scan_by_number(scan_number)
                 if scan is None:
-                    raise(ValueError(f'There is no scan number {scan_number} in {spec_file}'))
+                    raise ValueError(f'There is no scan number {scan_number} in {spec_file}')
         return(scan_numbers)
 
     @validator('stack_info')
@@ -406,7 +414,7 @@ class SpecScans(BaseModel):
         scan_index = [scan_index for scan_index, scan_info in enumerate(self.stack_info)
                 if scan_info['scan_number'] == scan_number]
         if len(scan_index) > 1:
-            raise(ValueError('Duplicate scan_numbers in image stack'))
+            raise ValueError('Duplicate scan_numbers in image stack')
         elif len(scan_index) == 1:
             return(scan_index[0])
         else:
@@ -469,7 +477,7 @@ class SpecScans(BaseModel):
                 except ValidationError as e:
                     print(e)
                 except KeyboardInterrupt as e:
-                    raise(e)
+                    raise e
                 except BaseException as e:
                     print(f'Unexpected {type(e).__name__}: {e}')
                 else:
@@ -598,14 +606,14 @@ class TomoField(SpecScans):
     @validator('theta_range')
     def validate_theta_range(cls, theta_range):
         if len(theta_range) != 4:
-            raise(ValueError(f'Invalid theta range {theta_range}'))
+            raise ValueError(f'Invalid theta range {theta_range}')
         is_num(theta_range['start'], raise_error=True)
         is_num(theta_range['end'], raise_error=True)
         is_int(theta_range['num'], raise_error=True)
         is_int(theta_range['start_index'], raise_error=True)
         if (theta_range['end'] <= theta_range['start'] or theta_range['num'] <= 0 or 
                 theta_range['start_index'] < 0):
-            raise(ValueError(f'Invalid theta range {theta_range}'))
+            raise ValueError(f'Invalid theta range {theta_range}')
         return(theta_range)
 
     def theta_range_cli(self, scan_number, attr_desc, station):
@@ -624,9 +632,9 @@ class TomoField(SpecScans):
             if (parser.theta_vals.get('start') != spec_theta_start or
                     parser.theta_vals.get('end') != spec_theta_end or
                     parser.theta_vals.get('num') != spec_num_theta):
-                raise(ValueError(f'Incompatible theta ranges between {attr_desc}scans:'+
+                raise ValueError(f'Incompatible theta ranges between {attr_desc}scans:'+
                         f'\n\tScan {self.scan_numbers[0]}: {theta_vals}'+
-                        f'\n\tScan {scan_number}: {parser.theta_vals}'))
+                        f'\n\tScan {scan_number}: {parser.theta_vals}')
             return
 
         # Select the theta range for the tomo reconstruction from the first scan
@@ -637,7 +645,7 @@ class TomoField(SpecScans):
         if (theta_start is not None and theta_end is not None and num_theta is not None and
                 theta_index_start is not None):
             if len(self.theta_range) != 4:
-                logging.warning(f'Illegal value for theta range {self.theta_range}')
+                logging.warning(f'Invalid value for theta range {self.theta_range}')
                 self.theta_range = {}
             if theta_start < spec_theta_start or theta_start not in thetas:
                 logging.warning('theta start value is incompatible with SPEC file '+
@@ -653,7 +661,7 @@ class TomoField(SpecScans):
                 self.theta_range = {}
         elif len(self.theta_range) and (len(self.theta_range) != 4 or theta_start is not None or
                 theta_end is not None or num_theta is not None or theta_index_start is not None):
-            logging.warning(f'Illegal value for theta range {self.theta_range}')
+            logging.warning(f'Invalid value for theta range {self.theta_range}')
             self.theta_range = {}
         theta_range_approved = False
         if len(self.theta_range) == 4:
@@ -716,9 +724,9 @@ class TomoField(SpecScans):
             num_theta = self.theta_range['num']
             theta_index_start = self.theta_range['start_index']
             if num_theta > num_image-theta_index_start:
-                raise(ValueError(f'Available {attr_desc}image indices incompatible with thetas:'+
+                raise ValueError(f'Available {attr_desc}image indices incompatible with thetas:'+
                         f'\n\tNumber of thetas and offset = {num_theta} and {theta_index_start}'+
-                        f'\n\tNumber of available images {num_image}'))
+                        f'\n\tNumber of available images {num_image}')
             if scan_index is not None:
                 scan_info = stack_info[scan_index]
                 scan_info['starting_image_offset'] = image_offset+theta_index_start
@@ -782,6 +790,7 @@ class Sample(BaseModel):
     def cli(self):
         print('\n -- Configure the sample metadata -- ')
 #RV        self.name = 'test'
+#RV        self.name = 'sobhani-3249-A'
         self.set_single_attr_cli('name', 'the sample name')
 #RV        self.description = 'test sample'
         self.set_single_attr_cli('description', 'a description of the sample (optional)')
@@ -804,9 +813,9 @@ class MapConfig(BaseModel):
     @classmethod
     def construct_from_nxentry(cls, nxentry:NXentry):
         config = {}
-        config['title'] = nxentry.nxname
         config['cycle'] = nxentry.instrument.source.attrs['cycle']
         config['btr'] = nxentry.instrument.source.attrs['btr']
+        config['title'] = nxentry.nxname
         config['station'] = nxentry.instrument.source.attrs['station']
         config['sample'] = Sample.construct_from_nxsample(nxentry['sample'])
         for nxobject_name, nxobject in nxentry.spec_scans.items():
@@ -829,15 +838,19 @@ class MapConfig(BaseModel):
         print('\n -- Configure a map from a set of SPEC scans (dark, bright, and tomo), '+
                 'and / or detector data -- ')
 #RV        self.cycle = '2021-3'
+#RV        self.cycle = '2022-2'
 #RV        self.cycle = '2023-1'
         self.set_single_attr_cli('cycle', 'beam cycle')
 #RV        self.btr = 'z-3234-A'
+#RV        self.btr = 'sobhani-3249-A'
 #RV        self.btr = 'przybyla-3606-a'
         self.set_single_attr_cli('btr', 'BTR')
 #RV        self.title = 'z-3234-A'
+#RV        self.title = 'tomo7C'
 #RV        self.title = 'cmc-test-dwell-1'
         self.set_single_attr_cli('title', 'title for the map entry')
 #RV        self.station = 'id3a'
+#RV        self.station = 'id3b'
 #RV        self.station = 'id1a3'
         self.set_single_attr_cli('station', 'name of the station at which scans were collected '+
                 '(currently choose from: id1a3, id3a, id3b)')
@@ -852,6 +865,7 @@ class MapConfig(BaseModel):
             have_detector_config = input_yesno(f'Is a detector configuration file available? (y/n)')
             if have_detector_config:
 #RV                detector_config_file = 'retiga.yaml'
+#RV                detector_config_file = 'andor2.yaml'
                 detector_config_file = input(f'Enter detector configuration file name: ')
                 have_detector_config = self.detector.construct_from_yaml(detector_config_file)
             if not have_detector_config:
@@ -872,7 +886,7 @@ class MapConfig(BaseModel):
                 station=self.station, detector=self.detector, spec_file=tomo_spec_file,
                     tomo_scan_numbers=self.tomo_fields.scan_numbers, scan_type='bf1')
 
-    def construct_nxentry(self, nxroot, logger=logging.getLogger(__name__)):
+    def construct_nxentry(self, nxroot):
         # Construct base NXentry
         nxentry = NXentry()
 
@@ -974,14 +988,14 @@ class MapConfig(BaseModel):
 #        nxdata.attrs['column_indices'] = 2
 
 
-class TOMOWorkflow(BaseModel):
+class TomoWorkflow(BaseModel):
     sample_maps: conlist(item_type=MapConfig, min_items=1) = [MapConfig.construct()]
 
     @classmethod
     def construct_from_nexus(cls, filename):
         nxroot = nxload(filename)
         sample_maps = []
-        config = {'sample_maps':sample_maps}
+        config = {'sample_maps': sample_maps}
         for nxentry_name, nxentry in nxroot.items():
             sample_maps.append(MapConfig.construct_from_nxentry(nxentry))
         return(cls(**config))
@@ -990,18 +1004,18 @@ class TOMOWorkflow(BaseModel):
         print('\n -- Configure a map -- ')
         self.set_list_attr_cli('sample_maps', 'sample map')
 
-    def construct_nxfile(self, filename, mode='w-', logger=logging.getLogger(__name__)):
+    def construct_nxfile(self, filename, mode='w-'):
         nxroot = NXroot()
         t0 = time()
         for sample_map in self.sample_maps:
             logger.info(f'Start constructing the {sample_map.title} map.')
             import_scanparser(sample_map.station)
-            sample_map.construct_nxentry(nxroot, logger=logger)
+            sample_map.construct_nxentry(nxroot)
         logger.info(f'Constructed all sample maps in {time()-t0:.2f} seconds.')
         logger.info(f'Start saving all sample maps to {filename}.')
         nxroot.save(filename, mode=mode)
 
-    def write_to_nexus(self, filename, logger=logging.getLogger(__name__)):
+    def write_to_nexus(self, filename):
         t0 = time()
-        self.construct_nxfile(filename, mode='w', logger=logger)
+        self.construct_nxfile(filename, mode='w')
         logger.info(f'Saved all sample maps to {filename} in {time()-t0:.2f} seconds.')

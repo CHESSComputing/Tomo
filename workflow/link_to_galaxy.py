@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
 import logging
+logger=logging.getLogger(__name__)
 
 from bioblend.galaxy import GalaxyInstance
 from nexusformat.nexus import *
 from os import path
 
-from .models import TOMOWorkflow
+from .models import TomoWorkflow
 
 def get_folder_id(gi, path):
     library_id = None
@@ -32,10 +33,9 @@ def get_folder_id(gi, path):
                             new_folders = nf
     return (library_id, folder_id, new_folders)
 
-def link_to_galaxy(filename:str, logger=logging.getLogger(__name__), galaxy=None,
-        user=None, password=None, api_key=None) -> None:
-
-    wf = TOMOWorkflow.construct_from_nexus(filename)
+def link_to_galaxy(filename:str, galaxy=None, user=None, password=None, api_key=None) -> None:
+    # Read input file
+    wf = TomoWorkflow.construct_from_nexus(filename)
     nxroot = nxload(filename, 'r')
     nxroot.close()
 
@@ -64,18 +64,18 @@ def link_to_galaxy(filename:str, logger=logging.getLogger(__name__), galaxy=None
 #            if user:
 #                gi.libraries.set_library_permissions(library_id, access_ids=user,
 #                        manage_ids=user, modify_ids=user)
-            logging.info(f'Created Library:\n{library}')
+            logger.info(f'Created Library:\n{library}')
         if len(folder_names):
             folder = gi.libraries.create_folder(library_id, folder_names[0], description=None,
                     base_folder_id=folder_id)[0]
             folder_id = folder['id']
-            logging.info(f'Created Folder:\n{folder}')
+            logger.info(f'Created Folder:\n{folder}')
             folder_names.pop(0)
             while len(folder_names):
                 folder = gi.folders.create_folder(folder['id'], folder_names[0],
                         description=None)
                 folder_id = folder['id']
-                logging.info(f'Created Folder:\n{folder}')
+                logger.info(f'Created Folder:\n{folder}')
                 folder_names.pop(0)
 
         # Create a sym link for the Nexus file
@@ -86,7 +86,7 @@ def link_to_galaxy(filename:str, logger=logging.getLogger(__name__), galaxy=None
         # Make a history for the data
         history_name = f'tomo {btr} {sample}'
         history = gi.histories.create_history(name=history_name)
-        logging.info(f'Created history:\n{history}')
+        logger.info(f'Created history:\n{history}')
         history_id = history['id']
         gi.histories.copy_dataset(history_id, dataset['id'], source='library')
 

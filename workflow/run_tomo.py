@@ -1,8 +1,9 @@
+#!/usr/bin/env python3
+
 import logging
-from multiprocessing import cpu_count
+logger=logging.getLogger(__name__)
+
 import numpy as np
-from nexusformat.nexus import *
-from time import time
 try:
     import numexpr as ne
 except:
@@ -11,6 +12,10 @@ try:
     import scipy.ndimage as spi
 except:
     pass
+
+from multiprocessing import cpu_count
+from nexusformat.nexus import *
+from os import mkdir, path
 try:
     from skimage.transform import iradon
 except:
@@ -19,17 +24,19 @@ try:
     from skimage.restoration import denoise_tv_chambolle
 except:
     pass
+from time import time
 try:
     import tomopy
 except:
     pass
 
 from msnctools.fit import Fit
-from msnctools.general import illegal_value, is_int, is_num, is_index_range, input_int, input_num, \
-        input_yesno, input_menu, draw_mask_1d, selectImageBounds, selectOneImageBound, \
-        clearImshow, quickImshow, clearPlot, quickPlot
+#from msnctools.general import illegal_value, is_int, is_num, is_index_range, input_int, input_num, \
+from general import illegal_value, is_int, is_num, is_index_range, input_int, input_num, \
+        input_yesno, input_menu, draw_mask_1d, select_image_bounds, select_one_image_bound, \
+        clear_imshow, quick_imshow, clear_plot, quick_plot
 
-from .models import TOMOWorkflow
+from .models import TomoWorkflow
 from .__version__ import __version__
 
 num_core_tomopy_limit = 24
@@ -51,33 +58,52 @@ class set_numexpr_threads:
 class Tomo:
     """Processing tomography data with misalignment.
     """
-    def __init__(self, nxentry, logger, force_overwrite=False, num_core=-1):
+    def __init__(self, nxentry, force_overwrite=False, num_core=-1, save_figs='no',
+                output_folder='.'):
         """Initialize with optional config input file or dictionary
         """
         self.force_overwrite = force_overwrite
-        self.logger = logger
         self.num_core = num_core
+        self.output_folder = path.abspath(output_folder)
+        if not path.isdir(output_folder):
+            mkdir(path.abspath(output_folder))
         self.nxentry = nxentry
         if not isinstance(self.nxentry, tree.NXentry):
-            illegal_value(nxentry, 'nxentry', 'Tomo:__init__', raise_error=True)
+            raise ValueError(f'Invalid parameter nxentry ({nxentry})')
         if not isinstance(self.force_overwrite, bool):
-            illegal_value(force_overwrite, 'force_overwrite', 'Tomo:__init__', raise_error=True)
+            raise ValueError(f'Invalid parameter force_overwrite ({force_overwrite})')
+        if save_figs == 'only':
+            self.save_only = True
+            self.save_figs = True
+        elif save_figs == 'yes':
+            self.save_only = False
+            self.save_figs = True
+        elif save_figs == 'no':
+            self.save_only = False
+            self.save_figs = False
+        else:
+            raise ValueError(f'Invalid parameter save_figs ({save_figs})')
+        if self.save_only:
+            self.block = False
+        else:
+            self.block = True
         if self.num_core == -1:
             self.num_core = cpu_count()
-        is_int(self.num_core, gt=0, raise_error=True)
+        if not is_int(self.num_core, gt=0, log=False):
+            raise ValueError(f'Invalid parameter num_core ({num_core})')
         if self.num_core > cpu_count():
             logger.warning(f'num_core = {self.num_core} is larger than the number of available '
                     f'processors and reduced to {cpu_count()}')
             self.num_core= cpu_count()
 
-    def genReducedData(self):
+    def gen_reduced_data(self):
         """Generate the reduced tomography images.
         """
-        self.logger.debug('Create the reduced tomography images')
+        logger.info('Generate the reduced tomography images')
 
         # Create an NXprocess to store data reduction (meta)data
         if 'reduced_data' in self.nxentry and self.force_overwrite:
-            self.logger.warning(f'Existing reduced data in {self.nxentry} will be overwritten.')
+            logger.warning(f'Existing reduced data in {self.nxentry} will be overwritten.')
             del self.nxentry['reduced_data']
         if 'reduced_data' in self.nxentry.data and self.force_overwrite:
             del self.nxentry.data['reduced_data']
@@ -89,11 +115,11 @@ class Tomo:
         image_key = self.nxentry.instrument.detector.image_key
         dark_field_indices = [index for index, key in enumerate(image_key) if key == 2]
         if len(dark_field_indices) > 0:
-            self._genDark(dark_field_indices, nxprocess)
+            self._gen_dark(dark_field_indices, nxprocess)
 
         # Generate bright field
         bright_field_indices = [index for index, key in enumerate(image_key) if key == 1]
-        self._genBright(bright_field_indices, nxprocess)
+        self._gen_bright(bright_field_indices, nxprocess)
 
         # Get tomo field indices for each set
         tomo_field_indices_all = [index for index, key in enumerate(image_key) if key == 0]
@@ -105,34 +131,34 @@ class Tomo:
                     for index, z in enumerate(z_translation_all) if z == z_translation]
 
         # Set vertical detector bounds for image stack
-        nxprocess.img_x_bounds = self._setDetectorBounds(tomo_field_indices)
+        nxprocess.img_x_bounds = self._set_detector_bounds(tomo_field_indices)
 
         # Set zoom and/or theta skip to reduce memory the requirement
-        zoom_perc, num_theta_skip = self._setZoomOrSkip(len(tomo_field_indices[0]))
+        zoom_perc, num_theta_skip = self._set_zoom_or_skip(len(tomo_field_indices[0]))
         if zoom_perc is not None:
             nxprocess.attrs['zoom_perc'] = zoom_perc
         if num_theta_skip is not None:
             nxprocess.attrs['num_theta_skip'] = num_theta_skip
 
         # Generate reduced tomography fields
-        self._genTomo(tomo_field_indices, nxprocess)
+        self._gen_tomo(tomo_field_indices, nxprocess)
 
         # Succesfull data reduction
         nxprocess.attrs['success'] = True
 
-    def findCenters(self):
+    def find_centers(self):
         """Find the calibrated center axis info
         """
-        self.logger.debug('Find the calibrated center axis info')
+        logger.info('Find the calibrated center axis info')
 
         # Check if reduced data is available
         if ('reduced_data' not in self.nxentry or not self.nxentry.reduced_data.attrs['success'] or
                 'reduced_data' not in self.nxentry.data):
-            raise(KeyError(f'Unable to find valid reduced data in {self.nxentry}.'))
+            raise KeyError(f'Unable to find valid reduced data in {self.nxentry}.')
 
         # Create an NXprocess to store calibrated center axis info (meta)data
         if 'find_center' in self.nxentry and self.force_overwrite:
-            self.logger.warning(f'Existing calibrated center axis info in {self.nxentry} will be '+
+            logger.warning(f'Existing calibrated center axis info in {self.nxentry} will be '+
                     'overwritten.')
             del self.nxentry['find_center']
         nxprocess = NXprocess()
@@ -171,28 +197,34 @@ class Tomo:
 
         # Get cross sectional diameter
         cross_sectional_dim = center_stack.shape[2]*eff_pixel_size
-        self.logger.debug(f'cross_sectional_dim = {cross_sectional_dim}')
+        logger.debug(f'cross_sectional_dim = {cross_sectional_dim}')
 
         # Determine center offset at sample row boundaries
-        self.logger.info('Determine center offset at sample row boundaries')
+        logger.info('Determine center offset at sample row boundaries')
 
         # Lower row center
         # center_stack order: row,theta,column
-        lower_row = selectOneImageBound(center_stack[:,0,:], 0, bound=0, title=f'theta={thetas[0]}',
-                bound_name='row index to find lower center', default=default)
-        lower_center_offset = self._findCenterOnePlane(center_stack[lower_row,:,:], lower_row,
+        lower_row = select_one_image_bound(center_stack[:,0,:], 0, bound=0,
+                title=f'theta={round(thetas[0], 2)+0}', bound_name='row index to find lower center',
+                default=default)
+        lower_center_offset = self._find_center_one_plane(center_stack[lower_row,:,:], lower_row,
                 thetas, eff_pixel_size, cross_sectional_dim, num_core=self.num_core)
-        self.logger.info(f'lower_center_offset = {lower_center_offset:.2f}')
+        logger.debug(f'lower_row = {lower_row:.2f}')
+        logger.debug(f'lower_center_offset = {lower_center_offset:.2f}')
 
         # Upper row center
-        upper_row = selectOneImageBound(center_stack[:,0,:], 0, bound=center_stack.shape[0]-1,
-                title=f'theta={thetas[0]}', bound_name='row index to find upper center',
+        upper_row = select_one_image_bound(center_stack[:,0,:], 0, bound=center_stack.shape[0]-1,
+                title=f'theta={round(thetas[0], 2)+0}', bound_name='row index to find upper center',
                 default=default)
-        upper_center_offset = self._findCenterOnePlane(center_stack[upper_row,:,:], upper_row,
+        upper_center_offset = self._find_center_one_plane(center_stack[upper_row,:,:], upper_row,
                 thetas, eff_pixel_size, cross_sectional_dim, num_core=self.num_core)
-        self.logger.info(f'upper_center_offset = {upper_center_offset:.2f}')
+        logger.debug(f'upper_row = {upper_row:.2f}')
+        logger.debug(f'upper_center_offset = {upper_center_offset:.2f}')
         del center_stack
 
+        # Add center info to find center NXprocess
+        t0 = time()
+        logger.info(f'Updating the Nexus file ... ')
         if num_tomo_stacks > 1:
             nxprocess.center_stack_index = center_stack_index
         nxprocess.lower_row = lower_row
@@ -200,24 +232,26 @@ class Tomo:
         nxprocess.upper_row = upper_row
         nxprocess.upper_center_offset = upper_center_offset
         nxprocess.attrs['success'] = True
+        logger.debug(f'... done in {time()-t0:.2f} seconds')
+        logger.info(f'Updating the Nexus file took {time()-t0:.2f} seconds')
 
-    def reconstructTomoStacks(self):
+    def reconstruct_tomo_stacks(self):
         """Reconstruct the tomography stacks.
         """
-        logging.debug('Reconstruct the tomography stacks')
+        logger.info('Reconstruct the tomography stacks')
 
         # Check if reduced data is available
         if ('reduced_data' not in self.nxentry or not self.nxentry.reduced_data.attrs['success'] or
                 'reduced_data' not in self.nxentry.data):
-            raise(KeyError(f'Unable to find valid reduced data in {self.nxentry}.'))
+            raise KeyError(f'Unable to find valid reduced data in {self.nxentry}.')
 
         # Check if calibrated center axis info is available
         if 'find_center' not in self.nxentry or not self.nxentry.find_center.attrs['success']:
-            raise(KeyError(f'Unable to find valid calibrated center axis info in {self.nxentry}.'))
+            raise KeyError(f'Unable to find valid calibrated center axis info in {self.nxentry}.')
 
         # Create an NXprocess to store image reconstruction (meta)data
         if 'reconstructed_image_data' in self.nxentry and self.force_overwrite:
-            self.logger.warning(f'Existing reconstructed image data in {self.nxentry} will be '+
+            logger.warning(f'Existing reconstructed image data in {self.nxentry} will be '+
                     'overwritten.')
             del self.nxentry['reconstructed_image_data']
         if 'reconstructed_images' in self.nxentry.data and self.force_overwrite:
@@ -242,42 +276,48 @@ class Tomo:
         #   Note: Nexus cannot follow a link if the data it points to is too big,
         #         so get the data from the actual place, not from self.nxentry.data
         if 'zoom_perc' in self.nxentry.reduced_data:
-            basetitle = f'recon stack {self.nxentry.reduced_data.attrs["zoom_perc"]}p'
+            res_title = f'{self.nxentry.reduced_data.attrs["zoom_perc"]}p'
         else:
-            basetitle = 'recon stack fullres'
+            res_title = 'fullres'
         load_error = False
         num_tomo_stacks = self.nxentry.reduced_data.data.tomo_fields.shape[0]
         tomo_recon_stacks = num_tomo_stacks*[np.array([])]
         for i in range(num_tomo_stacks):
             tomo_stack = np.asarray(self.nxentry.reduced_data.data.tomo_fields[i])
             if not tomo_stack.size:
-                raise(KeyError(f'Unable to load tomography stack {i} for reconstruction'))
+                raise KeyError(f'Unable to load tomography stack {i} for reconstruction')
             assert(0 <= lower_row < upper_row < tomo_stack.shape[0])
             center_offsets = [lower_center_offset-lower_row*center_slope,
                     upper_center_offset+(tomo_stack.shape[0]-1-upper_row)*center_slope]
             t0 = time()
-            logging.debug(f'running _reconstructOneTomoStack on {self.num_core} cores ...')
-            tomo_recon_stack = self._reconstructOneTomoStack(tomo_stack, thetas,
+            logger.debug(f'Running _reconstruct_one_tomo_stack on {self.num_core} cores ...')
+            tomo_recon_stack = self._reconstruct_one_tomo_stack(tomo_stack, thetas,
                     center_offsets=center_offsets, num_core=self.num_core, algorithm='gridrec')
-            logging.debug(f'... _reconstructOneTomoStack took {time()-t0:.2f} seconds!')
-            logging.info(f'Reconstruction of stack {i} took {time()-t0:.2f} seconds!')
+            logger.debug(f'... done in {time()-t0:.2f} seconds')
+            logger.info(f'Reconstruction of stack {i} took {time()-t0:.2f} seconds')
             x_slice = int(tomo_recon_stack.shape[0]/2)
-            title = f'{basetitle} {i} xslice{x_slice}'
-            quickImshow(tomo_recon_stack[x_slice,:,:], title=title)#, path=self.output_folder,
-#                    save_fig=self.save_plots, save_only=self.save_plots_only)
+            if num_tomo_stacks == 1:
+                basetitle = 'recon'
+            else:
+                basetitle = f'recon stack {i}'
+            title = f'{basetitle} {res_title} xslice{x_slice}'
+            quick_imshow(tomo_recon_stack[x_slice,:,:], title=title, path=self.output_folder,
+                    save_fig=self.save_figs, save_only=self.save_only, block=self.block)
             y_slice = int(tomo_recon_stack.shape[1]/2)
-            title = f'{basetitle} {i} yslice{y_slice}'
-            quickImshow(tomo_recon_stack[:,y_slice,:], title=title)#, path=self.output_folder,
-#                    save_fig=self.save_plots, save_only=self.save_plots_only)
+            title = f'{basetitle} {res_title} yslice{y_slice}'
+            quick_imshow(tomo_recon_stack[:,y_slice,:], title=title, path=self.output_folder,
+                    save_fig=self.save_figs, save_only=self.save_only, block=self.block)
             z_slice = int(tomo_recon_stack.shape[2]/2)
-            title = f'{basetitle} {i} zslice{z_slice}'
-            quickImshow(tomo_recon_stack[:,:,z_slice], title=title, block=True)#, path=self.output_folder,
-#                    save_fig=self.save_plots, save_only=self.save_plots_only)
+            title = f'{basetitle} {res_title} zslice{z_slice}'
+            quick_imshow(tomo_recon_stack[:,:,z_slice], title=title, path=self.output_folder,
+                    save_fig=self.save_figs, save_only=self.save_only, block=self.block)
 
             # Combine stacks
             tomo_recon_stacks[i] = tomo_recon_stack
 
         # Add image reconstruction to reconstructed data NXprocess
+        t0 = time()
+        logger.info(f'Updating the Nexus file ...')
         nxdata = NXdata()
         nxprocess.data = nxdata
         nxdata['reconstructed_images'] = tomo_recon_stacks
@@ -285,22 +325,26 @@ class Tomo:
         nxprocess.attrs['default'] = 'data'
         self.nxentry.data.makelink(nxprocess.data.reconstructed_images, name='reconstructed_images')
         self.nxentry.data.attrs['signal'] = 'reconstructed_images'
+        logger.debug(f'... done in {time()-t0:.2f} seconds')
+        logger.info(f'Updating the Nexus file took {time()-t0:.2f} seconds')
 
         # Succesfull image reconstruction
         nxprocess.attrs['success'] = True
 
-    def combineTomoStacks(self, galaxy_param=None):
+    def combine_tomo_stacks(self, galaxy_param=None):
         """Combine the reconstructed tomography stacks.
         """
+        logger.info('Combine the reconstructed tomography stacks')
+
         # Check if reconstructed images data is available
         if ('reconstructed_image_data' not in self.nxentry or
                 not self.nxentry.reconstructed_image_data.attrs['success'] or
                 'reconstructed_images' not in self.nxentry.data):
-            raise(KeyError(f'Unable to find valid reconstructed image data in {self.nxentry}.'))
+            raise KeyError(f'Unable to find valid reconstructed image data in {self.nxentry}.')
 
         # Create an NXprocess to store combined image reconstruction (meta)data
         if 'combined_image_data' in self.nxentry and self.force_overwrite:
-            self.logger.warning(f'Existing combined reconstructed image data in {self.nxentry} '+
+            logger.warning(f'Existing combined reconstructed image data in {self.nxentry} '+
                     'will be overwritten.')
             del self.nxentry['combined_image_data']
         if 'combined_image' in self.nxentry.data and self.force_overwrite:
@@ -335,11 +379,12 @@ class Tomo:
                     mask, x_bounds = draw_mask_1d(tomosum, title='select x data range',
                             legend='recon stack sum yz')
                 x_bounds = list(x_bounds[0])
-                quickPlot(tomosum, vlines=x_bounds, title='recon stack sum yz')
-                print(f'x_bounds = {x_bounds} (lower bound inclusive, upper bound '+
-                        'exclusive)')
-                accept = input_yesno('Accept these bounds (y/n)?', 'y')
-        logging.info(f'x_bounds = {x_bounds}')
+#                quick_plot(tomosum, vlines=x_bounds, title='recon stack sum yz')
+#                print(f'x_bounds = {x_bounds} (lower bound inclusive, upper bound '+
+#                        'exclusive)')
+#                accept = input_yesno('Accept these bounds (y/n)?', 'y')
+                accept = True
+        logger.debug(f'x_bounds = {x_bounds}')
 
         # Selecting y bounds (in xz-plane)
         tomosum = 0
@@ -359,15 +404,16 @@ class Tomo:
                     mask, y_bounds = draw_mask_1d(tomosum, title='select x data range',
                             legend='recon stack sum xz')
                 y_bounds = list(y_bounds[0])
-                quickPlot(tomosum, vlines=y_bounds, title='recon stack sum xz')
-                print(f'y_bounds = {y_bounds} (lower bound inclusive, upper bound '+
-                        'exclusive)')
-                accept = input_yesno('Accept these bounds (y/n)?', 'y')
-        logging.info(f'y_bounds = {y_bounds}')
+#                quick_plot(tomosum, vlines=y_bounds, title='recon stack sum xz')
+#                print(f'y_bounds = {y_bounds} (lower bound inclusive, upper bound '+
+#                        'exclusive)')
+#                accept = input_yesno('Accept these bounds (y/n)?', 'y')
+                accept = True
+        logger.debug(f'y_bounds = {y_bounds}')
 
         # Combine reconstructed tomography stacks
-        logging.info(f'Combining reconstructed stacks ...')
         t0 = time()
+        logger.debug(f'Combining the reconstructed stacks ...')
         tomo_recon_combined = tomo_recon_stacks[0][:,x_bounds[0]:x_bounds[1],
                 y_bounds[0]:y_bounds[1]]
         if num_tomo_stacks > 2:
@@ -378,7 +424,8 @@ class Tomo:
             tomo_recon_combined = np.concatenate([tomo_recon_combined]+
                     [tomo_recon_stacks[num_tomo_stacks-1][:,x_bounds[0]:x_bounds[1],
                     y_bounds[0]:y_bounds[1]]])
-        logging.info(f'... done in {time()-t0:.2f} seconds!')
+        logger.debug(f'... done in {time()-t0:.2f} seconds')
+        logger.info(f'Combining the reconstructed stacks took {time()-t0:.2f} seconds')
 
         # Selecting z bounds (in xy-plane)
         tomosum = np.sum(tomo_recon_combined, axis=(1,2))
@@ -396,26 +443,29 @@ class Tomo:
                     mask, z_bounds = draw_mask_1d(tomosum, title='select x data range',
                             legend='recon stack sum xy')
                 z_bounds = list(z_bounds[0])
-                quickPlot(tomosum, vlines=z_bounds, title='recon stack sum xy')
-                print(f'z_bounds = {z_bounds} (lower bound inclusive, upper bound '+
-                        'exclusive)')
-                accept = input_yesno('Accept these bounds (y/n)?', 'y')
-        logging.info(f'z_bounds = {z_bounds}')
+#                quick_plot(tomosum, vlines=z_bounds, title='recon stack sum xy')
+#                print(f'z_bounds = {z_bounds} (lower bound inclusive, upper bound '+
+#                        'exclusive)')
+#                accept = input_yesno('Accept these bounds (y/n)?', 'y')
+                accept = True
+        logger.debug(f'z_bounds = {z_bounds}')
 
-        path = '.'#self.output_folder
-        save_fig = False#self.save_plots
-        save_only = False#self.save_plots_only
-        quickImshow(tomo_recon_combined[int(tomo_recon_combined.shape[0]/2),:,:],
+        quick_imshow(tomo_recon_combined[int(tomo_recon_combined.shape[0]/2),:,:],
                 title=f'recon combined xslice{int(tomo_recon_combined.shape[0]/2)}',
-                path=path, save_fig=save_fig, save_only=save_only)
-        quickImshow(tomo_recon_combined[:,int(tomo_recon_combined.shape[1]/2),:],
+                path=self.output_folder, save_fig=self.save_figs, save_only=self.save_only,
+                block=self.block)
+        quick_imshow(tomo_recon_combined[:,int(tomo_recon_combined.shape[1]/2),:],
                 title=f'recon combined yslice{int(tomo_recon_combined.shape[1]/2)}',
-                path=path, save_fig=save_fig, save_only=save_only)
-        quickImshow(tomo_recon_combined[:,:,int(tomo_recon_combined.shape[2]/2)],
+                path=self.output_folder, save_fig=self.save_figs, save_only=self.save_only,
+                block=self.block)
+        quick_imshow(tomo_recon_combined[:,:,int(tomo_recon_combined.shape[2]/2)],
                 title=f'recon combined zslice{int(tomo_recon_combined.shape[2]/2)}',
-                path=path, save_fig=save_fig, save_only=save_only, block=True)
+                path=self.output_folder, save_fig=self.save_figs, save_only=self.save_only,
+                block=self.block)
 
         # Add combined image reconstruction to combined image data NXprocess
+        t0 = time()
+        logger.info(f'Updating the Nexus file ...')
         nxdata = NXdata()
         nxprocess.data = nxdata
         nxdata['combined_image'] = tomo_recon_combined
@@ -429,12 +479,14 @@ class Tomo:
             nxprocess.y_bounds = y_bounds
         if select_z_bounds:
             nxprocess.z_bounds = z_bounds
+        logger.debug(f'... done in {time()-t0:.2f} seconds')
+        logger.info(f'Updating the Nexus file took {time()-t0:.2f} seconds')
 
         # Succesfull image reconstruction
         nxprocess.attrs['success'] = True
 
 
-    def _genDark(self, dark_field_indices, nxprocess):
+    def _gen_dark(self, dark_field_indices, nxprocess):
         """Generate dark field.
         """
         # Get the bright field images
@@ -443,37 +495,38 @@ class Tomo:
         # Take median
         tdf = np.median(tdf_stack, axis=0)
         del tdf_stack
-        print(f'dark field raw range: {tdf.min()} {tdf.max()} {tdf.mean()} {np.median(tdf)}')
 
         # Remove dark field intensities above the cutoff
 #RV        tdf_cutoff = None
         tdf_cutoff = tdf.min()+2*(np.median(tdf)-tdf.min())
-        self.logger.debug(f'tdf_cutoff = {tdf_cutoff}')
+        logger.debug(f'tdf_cutoff = {tdf_cutoff}')
         if tdf_cutoff is not None:
             if not is_num(tdf_cutoff, ge=0):
-                self.logger.warning(f'Ignoring illegal value of tdf_cutoff {tdf_cutoff}')
+                logger.warning(f'Ignoring illegal value of tdf_cutoff {tdf_cutoff}')
             else:
                 tdf[tdf > tdf_cutoff] = np.nan
-                self.logger.debug(f'tdf_cutoff = {tdf_cutoff}')
+                logger.debug(f'tdf_cutoff = {tdf_cutoff}')
 
         tdf_mean = np.nanmean(tdf)
-        self.logger.debug(f'tdf_mean = {tdf_mean}')
+        logger.debug(f'tdf_mean = {tdf_mean}')
         np.nan_to_num(tdf, copy=False, nan=tdf_mean, posinf=tdf_mean, neginf=0.)
 #        if self.galaxy_flag:
-#            quickImshow(tdf, title='dark field', path='setup_pngs',
+#            quick_imshow(tdf, title='dark field', path='setup_pngs',
 #                    save_fig=True, save_only=True)
 #        elif not self.test_mode:
-#            quickImshow(tdf, title='dark field', path=self.output_folder,
-#                    save_fig=self.save_plots, save_only=self.save_plots_only)
-#        quickImshow(tdf, title='dark field', block=True)
-        print(f'dark field range: {tdf.min()} {tdf.max()}')
+#            quick_imshow(tdf, title='dark field', path=self.output_folder,
+#                    save_fig=self.save_figs, save_only=self.save_only)
+#        quick_imshow(tdf, title='dark field', block=True)
+        quick_imshow(tdf, title='dark field', path=self.output_folder, save_fig=self.save_figs,
+                save_only=self.save_only)
+        clear_imshow('dark field')
 
         # Add dark field to reduced data NXprocess
         nxdata = NXdata()
         nxprocess.data = nxdata
         nxdata['dark_field'] = tdf
 
-    def _genBright(self, bright_field_indices, nxprocess):
+    def _gen_bright(self, bright_field_indices, nxprocess):
         """Generate bright field.
         """
         # Get the bright field images
@@ -491,26 +544,27 @@ class Tomo:
         """
         tbf = np.median(tbf_stack, axis=0)
         del tbf_stack
-        print(f'bright field raw range: {tbf.min()} {tbf.max()}')
 
         # Subtract dark field
         if 'data' in nxprocess:
             tbf -= nxprocess.data.dark_field
         else:
-            self.logger.warning('Dark field unavailable')
+            logger.warning('Dark field unavailable')
 
         # Set any non-positive values to one
         # (avoid negative bright field values for spikes in dark field)
         tbf[tbf < 1] = 1
 
 #        if self.galaxy_flag:
-#            quickImshow(tbf, title='bright field', path='setup_pngs',
+#            quick_imshow(tbf, title='bright field', path='setup_pngs',
 #                    save_fig=True, save_only=True)
 #        elif not self.test_mode:
-#            quickImshow(tbf, title='bright field', path=self.output_folder,
-#                    save_fig=self.save_plots, save_only=self.save_plots_only)
-#        quickImshow(tbf, title='bright field', block=True)
-        print(f'bright field range after dark field: {tbf.min()} {tbf.max()}')
+#            quick_imshow(tbf, title='bright field', path=self.output_folder,
+#                    save_fig=self.save_figs, save_only=self.save_only)
+#        quick_imshow(tbf, title='bright field', block=True)
+        quick_imshow(tbf, title='bright field', path=self.output_folder, save_fig=self.save_figs,
+                save_only=self.save_only)
+        clear_imshow('bright field')
 
         # Add bright field to reduced data NXprocess
         if 'data' not in nxprocess:
@@ -518,130 +572,150 @@ class Tomo:
         nxdata = nxprocess.data
         nxdata['bright_field'] = tbf
 
-    def _setDetectorBounds(self, tomo_field_indices):
+    def _set_detector_bounds(self, tomo_field_indices):
         """Set vertical detector bounds for each image stack.
+        Right now the range is the same for each set in the image stack.
         """
         # Get bright field
         tbf = np.asarray(self.nxentry.reduced_data.data.bright_field)
 
-        # Check reference heights
-        pixel_size = self.nxentry.instrument.detector.x_pixel_size
-        num_x_min = None
-        num_tomo_stacks = len(tomo_field_indices)
-        if num_tomo_stacks > 1:
-            z_translation = self.nxentry.sample.z_translation
-            delta_z = z_translation[tomo_field_indices[1][0]]- \
-                    z_translation[tomo_field_indices[0][0]]
-            for i in range(2, num_tomo_stacks):
-                delta_z = min(delta_z, z_translation[tomo_field_indices[i][0]]- \
-                    z_translation[tomo_field_indices[i-1][0]])
-            self.logger.debug(f'delta_z = {delta_z}')
-            num_x_min = int((delta_z-0.5*pixel_size)/pixel_size)
-            self.logger.debug(f'num_x_min = {num_x_min}')
-            if num_x_min > tbf.shape[0]:
-                self.logger.warning('Image bounds and pixel size prevent seamless stacking')
-                num_x_min = None
-
         # Select image bounds
-        title = None
-        quickImshow(tbf, title='bright field')
-        if num_tomo_stacks == 1:
-            # For one tomography stack only: load the first image
-            image = np.asarray(self.nxentry.instrument.detector.data[tomo_field_indices[0][0]])
-            theta = float(self.nxentry.sample.rotation_angle[tomo_field_indices[0][0]])
-            title = f'tomography image at theta={theta}'
-            quickImshow(image, title=title)
-            tomo_or_bright = input_menu(['bright field', 'first tomography image'],
-                    header='\nSelect image bounds from')
-        else:
-            tomo_or_bright = 0
-        if tomo_or_bright:
-            x_sum = np.sum(image, 1)
-            title = f'tomography image at theta={theta}'
-            img_x_bounds = selectImageBounds(image, 0, num_min=num_x_min, title=title,
-                    raise_error=True)
-            if num_x_min is not None and img_x_bounds[1]-img_x_bounds[0]+1 < num_x_min:
-                self.logger.warning('Image bounds and pixel size prevent seamless stacking')
-            quickImshow(image, title=title)#, path=self.output_folder,
-#                    save_fig=self.save_plots, save_only=True)
-            quickPlot(range(img_x_bounds[0], img_x_bounds[1]),
-                    x_sum[img_x_bounds[0]:img_x_bounds[1]],
-                    title='sum over theta and y')#, path=self.output_folder,
-#                    save_fig=self.save_plots, save_only=True)
-        else:
+        num_tomo_stacks = len(tomo_field_indices)
+        first_image = np.asarray(self.nxentry.instrument.detector.data[tomo_field_indices[0][0]])
+        theta = float(self.nxentry.sample.rotation_angle[tomo_field_indices[0][0]])
+        title = f'tomography image at theta={round(theta, 2)+0}'
+        if self.nxentry.instrument.source.attrs['station'] in ('id1a3', 'id3a'):
+            pixel_size = self.nxentry.instrument.detector.x_pixel_size
+            # Try to get a fit from the bright field
             x_sum = np.sum(tbf, 1)
             x_sum_min = x_sum.min()
             x_sum_max = x_sum.max()
-            use_fit = False
             fit = Fit.fit_data(x_sum, 'rectangle', x=np.array(range(len(x_sum))), form='atan',
                     guess=True)
             parameters = fit.best_values
-            x_low = parameters.get('center1', None)
-            x_upp = parameters.get('center2', None)
+            x_low_fit = parameters.get('center1', None)
+            x_upp_fit = parameters.get('center2', None)
             sig_low = parameters.get('sigma1', None)
             sig_upp = parameters.get('sigma2', None)
-            if (x_low is not None and x_upp is not None and sig_low is not None and
-                    sig_upp is not None and 0 <= x_low < x_upp <= x_sum.size and
-                    (sig_low+sig_upp)/(x_upp-x_low) < 0.1):
-                if num_tomo_stacks == 1 or num_x_min is None:
-                    x_low = int(x_low-(x_upp-x_low)/10)
-                    x_upp = int(x_upp+(x_upp-x_low)/10)
+            have_fit = fit.success and x_low_fit is not None and x_upp_fit is not None and \
+                    sig_low is not None and sig_upp is not None and \
+                    0 <= x_low_fit < x_upp_fit <= x_sum.size and \
+                    (sig_low+sig_upp)/(x_upp_fit-x_low_fit) < 0.1
+            if have_fit:
+                # Set a 5% margin on each side
+                margin = 0.05*(x_upp_fit-x_low_fit)
+                x_low_fit = max(0, x_low_fit-margin)
+                x_upp_fit = min(tbf.shape[0], x_upp_fit+margin)
+            if num_tomo_stacks == 1:
+                if have_fit:
+                    # Set the default range to enclose the full fitted window
+                    x_low = int(x_low_fit)
+                    x_upp = int(x_upp_fit)
                 else:
-                    x_low = int((x_low+x_upp)/2-num_x_min/2)
+                    # Center a default range of 1 mm (RV: can we get this from the slits?)
+                    num_x_min = int((1.0-0.5*pixel_size)/pixel_size)
+                    x_low = int(0.5*(tbf.shape[0]-num_x_min))
                     x_upp = x_low+num_x_min
-                if x_low < 0:
-                    x_low = 0
-                if x_upp > x_sum.size:
-                    x_upp = x_sum.size
-                tmp = np.copy(tbf)
-                tmp_max = tmp.max()
-                tmp[x_low,:] = tmp_max
-                tmp[x_upp-1,:] = tmp_max
-                title = 'bright field'
-                quickImshow(tmp, title=title)
-                del tmp
-                quickPlot((range(x_sum.size), x_sum),
-                        ([x_low, x_low], [x_sum_min, x_sum_max], 'r-'),
-                        ([x_upp, x_upp], [x_sum_min, x_sum_max], 'r-'),
-                        title='sum over theta and y')
-                print(f'lower bound = {x_low} (inclusive)')
-                print(f'upper bound = {x_upp} (exclusive)]')
-                use_fit =  input_yesno('Accept these bounds (y/n)?', 'y')
-            if use_fit:
-                img_x_bounds = [x_low, x_upp]
             else:
-                accept = False
-                while not accept:
+                # Get the default range from the reference heights
+                z_translation = self.nxentry.sample.z_translation
+                delta_z = z_translation[tomo_field_indices[1][0]]- \
+                        z_translation[tomo_field_indices[0][0]]
+                for i in range(2, num_tomo_stacks):
+                    delta_z = min(delta_z, z_translation[tomo_field_indices[i][0]]- \
+                        z_translation[tomo_field_indices[i-1][0]])
+                logger.debug(f'delta_z = {delta_z}')
+                num_x_min = int((delta_z-0.5*pixel_size)/pixel_size)
+                logger.debug(f'num_x_min = {num_x_min}')
+                if num_x_min > tbf.shape[0]:
+                    logger.warning('Image bounds and pixel size prevent seamless stacking')
+                if have_fit:
+                    # Center the default range relative to the fitted window
+                    x_low = int(0.5*(x_low_fit+x_upp_fit-num_x_min))
+                    x_upp = x_low+num_x_min
+                else:
+                    # Center the default range
+                    x_low = int(0.5*(tbf.shape[0]-num_x_min))
+                    x_upp = x_low+num_x_min
+            tmp = np.copy(tbf)
+            tmp_max = tmp.max()
+            tmp[x_low,:] = tmp_max
+            tmp[x_upp-1,:] = tmp_max
+            quick_imshow(tmp, title='bright field')
+            tmp = np.copy(first_image)
+            tmp_max = tmp.max()
+            tmp[x_low,:] = tmp_max
+            tmp[x_upp-1,:] = tmp_max
+            quick_imshow(tmp, title=title)
+            del tmp
+            quick_plot((range(x_sum.size), x_sum),
+                    ([x_low, x_low], [x_sum_min, x_sum_max], 'r-'),
+                    ([x_upp, x_upp], [x_sum_min, x_sum_max], 'r-'),
+                    title='sum over theta and y')
+            print(f'lower bound = {x_low} (inclusive)')
+            print(f'upper bound = {x_upp} (exclusive)]')
+            accept =  input_yesno('Accept these bounds (y/n)?', 'y')
+            clear_imshow('bright field')
+            clear_imshow(title)
+            clear_plot('sum over theta and y')
+            if accept:
+                img_x_bounds = (x_low, x_upp)
+            else:
+                while True:
                     mask, img_x_bounds = draw_mask_1d(x_sum, title='select x data range',
                             legend='sum over theta and y')
-                    img_x_bounds = list(img_x_bounds[0])
-                    quickPlot(x_sum, vlines=img_x_bounds, title='sum over theta and y')
-                    print(f'img_x_bounds = {img_x_bounds} (lower bound inclusive, upper bound '+
-                            'exclusive)')
-                    accept = input_yesno('Accept these bounds (y/n)?', 'y')
-            if num_x_min is not None and img_x_bounds[1]-img_x_bounds[0]+1 < num_x_min:
-                self.logger.warning('Image bounds and pixel size prevent seamless stacking')
-            quickPlot((range(x_sum.size), x_sum),
-                    ([img_x_bounds[0], img_x_bounds[0]], [x_sum_min, x_sum_max], 'r-'),
-                    ([img_x_bounds[1], img_x_bounds[1]], [x_sum_min, x_sum_max], 'r-'),
-                    title='sum over theta and y')#, path=self.output_folder,
-#                    save_fig=self.save_plots, save_only=True)
-            del x_sum
-        self.logger.debug(f'img_x_bounds: {img_x_bounds}')
+                    if len(img_x_bounds) == 1:
+                        break
+                    else:
+                        print(f'Choose a single connected data range')
+                img_x_bounds = tuple(img_x_bounds[0])
+            if (num_tomo_stacks > 1 and img_x_bounds[1]-img_x_bounds[0]+1 < 
+                    int((delta_z-0.5*pixel_size)/pixel_size)):
+                logger.warning('Image bounds and pixel size prevent seamless stacking')
+        else:
+            if num_tomo_stacks > 1:
+                raise NotImplementedError('Selecting image bounds for multiple stacks on FMB')
+            # For FMB: use the first tomography image to select range
+            # RV: revisit if they do tomography with multiple stacks
+            quick_imshow(first_image, title=title)
+            x_sum = np.sum(first_image, 1)
+            x_sum_min = x_sum.min()
+            x_sum_max = x_sum.max()
+            print('Select vertical data reduction range from first tomography image')
+            img_x_bounds = select_image_bounds(first_image, 0, title=title)
+            clear_imshow(title)
+            if img_x_bounds is None:
+                raise ValueError('Unable to select image bounds')
+        logger.debug(f'img_x_bounds: {img_x_bounds}')
 
-#        if self.save_plots_only:
-#            clearImshow('bright field')
-#            clearPlot('sum over theta and y')
-#            if title:
-#                clearPlot(title)
-        clearImshow('bright field')
-        clearPlot('sum over theta and y')
-        if title:
-            clearPlot(title)
+        x_low = img_x_bounds[0]
+        x_upp = img_x_bounds[1]
+        tmp = np.copy(tbf)
+        tmp_max = tmp.max()
+        tmp[x_low,:] = tmp_max
+        tmp[x_upp-1,:] = tmp_max
+        quick_imshow(tmp, title='bright field', path=self.output_folder, save_fig=self.save_figs,
+                save_only=self.save_only, block=self.block)
+        tmp = np.copy(first_image)
+        tmp_max = tmp.max()
+        tmp[x_low,:] = tmp_max
+        tmp[x_upp-1,:] = tmp_max
+        quick_imshow(tmp, title=title, path=self.output_folder, save_fig=self.save_figs,
+                save_only=self.save_only, block=self.block)
+        del tmp
+        quick_plot((range(x_sum.size), x_sum),
+                ([x_low, x_low], [x_sum_min, x_sum_max], 'r-'),
+                ([x_upp, x_upp], [x_sum_min, x_sum_max], 'r-'),
+                title='sum over theta and y', path=self.output_folder, save_fig=self.save_figs,
+                save_only=self.save_only, block=self.block)
+#        if not self.block:
+#            clear_imshow('bright field')
+#            clear_plot(title)
+#            clear_plot('sum over theta and y')
 
         return(img_x_bounds)
 
-    def _setZoomOrSkip(self, num_theta):
+    def _set_zoom_or_skip(self, num_theta):
         """Set zoom and/or theta skip to reduce memory the requirement for the analysis.
         """
 #        if input_yesno('\nDo you want to zoom in to reduce memory requirement (y/n)?', 'n'):
@@ -655,11 +729,11 @@ class Tomo:
 #        else:
 #            num_theta_skip = None
         num_theta_skip = None
-        self.logger.debug(f'zoom_perc = {zoom_perc}')
-        self.logger.debug(f'num_theta_skip = {num_theta_skip}')
+        logger.debug(f'zoom_perc = {zoom_perc}')
+        logger.debug(f'num_theta_skip = {num_theta_skip}')
         return(zoom_perc, num_theta_skip)
 
-    def _genTomo(self, tomo_field_indices, nxprocess):
+    def _gen_tomo(self, tomo_field_indices, nxprocess):
         """Generate tomography fields.
         """
         tbf_shape = nxprocess.data.bright_field.shape
@@ -668,14 +742,14 @@ class Tomo:
         zoom_perc = nxprocess.attrs.get('zoom_perc', 100)
         #num_theta_skip = nxprocess.attrs.get('num_theta_skip', 0)
         if nxprocess.attrs.get('num_theta_skip', None) is not None:
-            raise(ValueError('num_theta_skip is not yet implemented'))
+            raise ValueError('num_theta_skip is not yet implemented')
 
         # Get dark field
         if 'dark_field' in nxprocess.data:
             tdf = nxprocess.data.dark_field[
                     img_x_bounds[0]:img_x_bounds[1],img_y_bounds[0]:img_y_bounds[1]]
         else:
-            self.logger.warning('Dark field unavailable')
+            logger.warning('Dark field unavailable')
             tdf = None
 
         # Get bright field
@@ -701,73 +775,76 @@ class Tomo:
                         for i, index in enumerate(sequence_numbers)))
 
             # Get the tomography images
+            # Right now the range is the same for each set in the image stack.
             t0 = time()
             if list(sequence_numbers) == [i for i in range(len(sequence_numbers))]:
                 tomo_stack = np.asarray(self.nxentry.instrument.detector.data[field_indices,
                         img_x_bounds[0]:img_x_bounds[1],img_y_bounds[0]:img_y_bounds[1]])
             else:
-                raise(ValueError)
+                raise ValueError('Unable to load the tomography images')
             tomo_stack = tomo_stack.astype('float64')
-            self.logger.debug(f'getting tomography images took {time()-t0:.2f} seconds!')
-            print(f'tomo raw range ({tomo_stack.shape}): {tomo_stack.min()} {tomo_stack.max()}')
+            logger.debug(f'Getting tomography images took {time()-t0:.2f} seconds')
 
             # Subtract dark field
             if tdf is not None:
                 t0 = time()
                 with set_numexpr_threads(self.num_core):
                     ne.evaluate('tomo_stack-tdf', out=tomo_stack)
-                self.logger.debug(f'subtracting dark field took {time()-t0:.2f} seconds!')
-                print(f'tomo after dark range: {tomo_stack.min()} {tomo_stack.max()}')
+                logger.debug(f'Subtracting dark field took {time()-t0:.2f} seconds')
 
             # Normalize
             t0 = time()
             with set_numexpr_threads(self.num_core):
                 ne.evaluate('tomo_stack/tbf', out=tomo_stack, truediv=True)
-            self.logger.debug(f'normalizing took {time()-t0:.2f} seconds!')
-            print(f'tomo after bright range: {tomo_stack.min()} {tomo_stack.max()}')
+            logger.debug(f'Normalizing took {time()-t0:.2f} seconds')
 
             # Remove non-positive values and linearize data
             t0 = time()
             cutoff = 1.e-6
             with set_numexpr_threads(self.num_core):
                 ne.evaluate('where(tomo_stack<cutoff, cutoff, tomo_stack)', out=tomo_stack)
-            print(f'tomo after non-positive: {tomo_stack.min()} {tomo_stack.max()}')
             with set_numexpr_threads(self.num_core):
                 ne.evaluate('-log(tomo_stack)', out=tomo_stack)
-            self.logger.debug('removing non-positive values and linearizing data took '+
-                    f'{time()-t0:.2f} seconds!')
-            print(f'tomo after linearize: {tomo_stack.min()} {tomo_stack.max()}')
+            logger.debug('Removing non-positive values and linearizing data took '+
+                    f'{time()-t0:.2f} seconds')
 
             # Get rid of nans/infs that may be introduced by normalization
             t0 = time()
             np.where(np.isfinite(tomo_stack), tomo_stack, 0.)
-            self.logger.debug(f'remove nans/infs took {time()-t0:.2f} seconds!')
-            print(f'tomo after nans: {tomo_stack.min()} {tomo_stack.max()}')
+            logger.debug(f'Remove nans/infs took {time()-t0:.2f} seconds')
 
             # Downsize tomography stack to smaller size
             # TODO use theta_skip as well
             tomo_stack = tomo_stack.astype('float32')
-            #title = f'red stack fullres {index}'
-            #quickImshow(tomo_stack[0,:,:], title=title)#, path=self.output_folder,
-            #        save_fig=self.save_plots, save_only=self.save_plots_only)
+            if num_tomo_stacks ==1:
+                title = f'red fullres theta {round(thetas[0], 2)+0}'
+            else:
+                title = f'red stack {i} fullres theta {round(thetas[0], 2)+0}'
+            quick_imshow(tomo_stack[0,:,:], title=title, path=self.output_folder,
+                    save_fig=self.save_figs, save_only=self.save_only, block=self.block)
+#            if not self.block:
+#                clear_imshow(title)
             if zoom_perc != 100:
                 t0 = time()
-                self.logger.info(f'Zooming in ...')
+                logger.debug(f'Zooming in ...')
                 tomo_zoom_list = []
                 for j in range(tomo_stack.shape[0]):
                     tomo_zoom = spi.zoom(tomo_stack[j,:,:], 0.01*zoom_perc)
                     tomo_zoom_list.append(tomo_zoom)
                 tomo_stack = np.stack([tomo_zoom for tomo_zoom in tomo_zoom_list])
-                self.logger.info(f'... done in {time()-t0:.2f} seconds!')
+                logger.debug(f'... done in {time()-t0:.2f} seconds')
+                logger.info(f'Zooming in took {time()-t0:.2f} seconds')
                 del tomo_zoom_list
-                #title = f'red stack {zoom_perc}p {index}'
-                #quickImshow(tomo_stack[0,:,:], title=title, path=self.output_folder,
-                #        save_fig=self.save_plots, save_only=self.save_plots_only)
+                title = f'red stack {zoom_perc}p theta {round(thetas[0], 2)+0}'
+                quick_imshow(tomo_stack[0,:,:], title=title, path=self.output_folder,
+                        save_fig=self.save_figs, save_only=self.save_only, block=self.block)
+#                if not self.block:
+#                    clear_imshow(title)
 
             # Convert tomography stack from theta,row,column to row,theta,column
             t0 = time()
             tomo_stack = np.swapaxes(tomo_stack, 0, 1)
-            self.logger.debug(f'converting coordinate order took {time()-t0:.2f} seconds!')
+            logger.debug(f'Converting coordinate order took {time()-t0:.2f} seconds')
 
             # Combine stacks
             tomo_stacks[i] = tomo_stack
@@ -777,6 +854,8 @@ class Tomo:
         del tbf
 
         # Add tomo fields to reduced data NXprocess
+        t0 = time()
+        logger.info(f'Updating the Nexus file ...')
         nxdata = nxprocess.data
         nxdata['tomo_fields'] = tomo_stacks
         nxdata.attrs['signal'] = 'tomo_fields'
@@ -787,8 +866,10 @@ class Tomo:
         nxprocess.rotation_angle.units = self.nxentry.sample.rotation_angle.units
         self.nxentry.data.makelink(nxprocess.data.tomo_fields, name='reduced_data')
         self.nxentry.data.attrs['signal'] = 'reduced_data'
+        logger.debug(f'... done in {time()-t0:.2f} seconds')
+        logger.info(f'Updating the Nexus file took {time()-t0:.2f} seconds')
 
-    def _findCenterOnePlane(self, sinogram, row, thetas, eff_pixel_size, cross_sectional_dim,
+    def _find_center_one_plane(self, sinogram, row, thetas, eff_pixel_size, cross_sectional_dim,
             tol=0.1, num_core=1):
         """Find center for a single tomography plane.
         """
@@ -801,41 +882,57 @@ class Tomo:
         # Try using Nghia Vo’s method
         t0 = time()
         if num_core > num_core_tomopy_limit:
-            self.logger.debug(f'running find_center_vo on {num_core_tomopy_limit} cores ...')
+            logger.debug(f'Running find_center_vo on {num_core_tomopy_limit} cores ...')
             tomo_center = tomopy.find_center_vo(sinogram, ncore=num_core_tomopy_limit)
         else:
-            self.logger.debug(f'running find_center_vo on {num_core} cores ...')
+            logger.debug(f'Running find_center_vo on {num_core} cores ...')
             tomo_center = tomopy.find_center_vo(sinogram, ncore=num_core)
-        self.logger.debug(f'... find_center_vo took {time()-t0:.2f} seconds!')
+        logger.debug(f'... done in {time()-t0:.2f} seconds')
+        logger.info(f'Finding the center using Nghia Vo’s method took {time()-t0:.2f} seconds')
         center_offset_vo = tomo_center-center
-        print(f'Center at row {row} using Nghia Vo’s method = {center_offset_vo:.2f}')
-        recon_plane = self._reconstructOnePlane(sinogram_T, tomo_center, thetas,
+        logging.info(f'Center at row {row} using Nghia Vo’s method = {center_offset_vo:.2f}')
+        t0 = time()
+        logger.debug(f'Running _reconstruct_one_plane on {self.num_core} cores ...')
+        recon_plane = self._reconstruct_one_plane(sinogram_T, tomo_center, thetas,
                 eff_pixel_size, cross_sectional_dim, False, num_core)
+        logger.debug(f'... done in {time()-t0:.2f} seconds')
+        logger.info(f'Reconstructing row {row} took {time()-t0:.2f} seconds')
+
         title = f'edges row{row} center offset{center_offset_vo:.2f} Vo'
-        self._plotEdgesOnePlane(recon_plane, title)
+        self._plot_edges_one_plane(recon_plane, title)
 
         # Try using phase correlation method
-        if input_yesno('Try finding center using phase correlation (y/n)?', 'n'):
-            t0 = time()
-            tomo_center = tomopy.find_center_pc(sinogram, sinogram, tol=0.1, rotc_guess=tomo_center)
-            error = 1.
-            while error > tol:
-                prev = tomo_center
-                tomo_center = tomopy.find_center_pc(sinogram, sinogram, tol=tol,
-                        rotc_guess=tomo_center)
-                error = np.abs(tomo_center-prev)
-            self.logger.debug(f'... find_center_pc took {time()-t0:.2f} seconds!')
-            center_offset = tomo_center-center
-            print(f'Center at row {row} using phase correlation = {center_offset:.2f}')
-            recon_plane = self._reconstructOnePlane(sinogram_T, tomo_center, thetas,
-                    eff_pixel_size, cross_sectional_dim, False, num_core)
-            title = f'edges row{row} center_offset{center_offset:.2f} PC'
-            self._plotEdgesOnePlane(recon_plane, title)
+#        if input_yesno('Try finding center using phase correlation (y/n)?', 'n'):
+#            t0 = time()
+#            logger.debug(f'Running find_center_pc ...')
+#            tomo_center = tomopy.find_center_pc(sinogram, sinogram, tol=0.1, rotc_guess=tomo_center)
+#            error = 1.
+#            while error > tol:
+#                prev = tomo_center
+#                tomo_center = tomopy.find_center_pc(sinogram, sinogram, tol=tol,
+#                        rotc_guess=tomo_center)
+#                error = np.abs(tomo_center-prev)
+#            logger.debug(f'... done in {time()-t0:.2f} seconds')
+#            logger.info('Finding the center using the phase correlation method took '+
+#                    f'{time()-t0:.2f} seconds')
+#            center_offset = tomo_center-center
+#            print(f'Center at row {row} using phase correlation = {center_offset:.2f}')
+#            t0 = time()
+#            logger.debug(f'Running _reconstruct_one_plane on {self.num_core} cores ...')
+#            recon_plane = self._reconstruct_one_plane(sinogram_T, tomo_center, thetas,
+#                    eff_pixel_size, cross_sectional_dim, False, num_core)
+#            logger.debug(f'... done in {time()-t0:.2f} seconds')
+#            logger.info(f'Reconstructing row {row} took {time()-t0:.2f} seconds')
+#
+#            title = f'edges row{row} center_offset{center_offset:.2f} PC'
+#            self._plot_edges_one_plane(recon_plane, title)
 
         # Select center location
-        if input_yesno('Accept a center location (y) or continue search (n)?', 'y'):
-            center_offset = input_num('    Enter chosen center offset', ge=-center, le=center,
-                    default=center_offset_vo)
+#        if input_yesno('Accept a center location (y) or continue search (n)?', 'y'):
+        if True:
+#            center_offset = input_num('    Enter chosen center offset', ge=-center, le=center,
+#                    default=center_offset_vo)
+            center_offset = center_offset_vo
             del sinogram_T
             del recon_plane
             return float(center_offset)
@@ -857,12 +954,14 @@ class Tomo:
                 if center_offset == center_offset_vo:
                     continue
                 t0 = time()
-                self.logger.debug(f'running _reconstructOnePlane on {num_core} cores ...')
-                recon_plane = self._reconstructOnePlane(sinogram_T, center_offset+center, thetas,
+                logger.debug(f'Running _reconstruct_one_plane on {num_core} cores ...')
+                recon_plane = self._reconstruct_one_plane(sinogram_T, center_offset+center, thetas,
                         eff_pixel_size, cross_sectional_dim, False, num_core)
-                self.logger.debug(f'... _reconstructOnePlane took {time()-t0:.2f} seconds!')
+                logger.debug(f'... done in {time()-t0:.2f} seconds')
+                logger.info(f'Reconstructing center_offset {center_offset} took '+
+                        f'{time()-t0:.2f} seconds')
                 title = f'edges row{row} center_offset{center_offset:.2f}'
-                self._plotEdgesOnePlane(recon_plane, title)
+                self._plot_edges_one_plane(recon_plane, title)
             if input_int('\nContinue (0) or end the search (1)', ge=0, le=1):
                 break
 
@@ -871,7 +970,7 @@ class Tomo:
         center_offset = input_num('    Enter chosen center offset', ge=-center, le=center)
         return float(center_offset)
 
-    def _reconstructOnePlane(self, tomo_plane_T, center, thetas, eff_pixel_size,
+    def _reconstruct_one_plane(self, tomo_plane_T, center, thetas, eff_pixel_size,
             cross_sectional_dim, plot_sinogram=True, num_core=1):
         """Invert the sinogram for a single tomography plane.
         """
@@ -885,20 +984,20 @@ class Tomo:
             max_rad = 0.5*tomo_plane_T.shape[0]
         dist_from_edge = max(1, int(np.floor((tomo_plane_T.shape[0]-two_offset_abs)/2.)-max_rad))
         if two_offset >= 0:
-            self.logger.debug(f'sinogram range = [{two_offset+dist_from_edge}, {-dist_from_edge}]')
+            logger.debug(f'sinogram range = [{two_offset+dist_from_edge}, {-dist_from_edge}]')
             sinogram = tomo_plane_T[two_offset+dist_from_edge:-dist_from_edge,:]
         else:
-            self.logger.debug(f'sinogram range = [{dist_from_edge}, {two_offset-dist_from_edge}]')
+            logger.debug(f'sinogram range = [{dist_from_edge}, {two_offset-dist_from_edge}]')
             sinogram = tomo_plane_T[dist_from_edge:two_offset-dist_from_edge,:]
         if plot_sinogram:
-            quickImshow(sinogram.T, f'sinogram center offset{center_offset:.2f}', aspect='auto')#,
-#                    path=self.output_folder, save_fig=self.save_plots,
-#                    save_only=self.save_plots_only)
+            quick_imshow(sinogram.T, f'sinogram center offset{center_offset:.2f}', aspect='auto',
+                    path=self.output_folder, save_fig=self.save_figs, save_only=self.save_only,
+                    block=self.block)
 
         # Inverting sinogram
         t0 = time()
         recon_sinogram = iradon(sinogram, theta=thetas, circle=True)
-        self.logger.debug(f'inverting sinogram took {time()-t0:.2f} seconds!')
+        logger.debug(f'Inverting sinogram took {time()-t0:.2f} seconds')
         del sinogram
 
         # Performing Gaussian filtering and removing ring artifacts
@@ -909,47 +1008,45 @@ class Tomo:
         else:
             sigma = recon_parameters.get('gaussian_sigma', 1.0)
             if not is_num(sigma, ge=0.0):
-                self.logger.warning(f'Illegal gaussian_sigma ({sigma}) in _reconstructOnePlane, '+
+                logger.warning(f'Invalid gaussian_sigma ({sigma}) in _reconstruct_one_plane, '+
                         'set to a default value of 1.0')
                 sigma = 1.0
             ring_width = recon_parameters.get('ring_width', 15)
             if not is_int(ring_width, ge=0):
-                self.logger.warning(f'Illegal ring_width ({ring_width}) in _reconstructOnePlane, '+
+                logger.warning(f'Invalid ring_width ({ring_width}) in _reconstruct_one_plane, '+
                         'set to a default value of 15')
                 ring_width = 15
         t0 = time()
         recon_sinogram = spi.gaussian_filter(recon_sinogram, sigma, mode='nearest')
         recon_clean = np.expand_dims(recon_sinogram, axis=0)
         del recon_sinogram
-        t1 = time()
-        self.logger.debug(f'running remove_ring on {num_core} cores ...')
         recon_clean = tomopy.misc.corr.remove_ring(recon_clean, rwidth=ring_width, ncore=num_core)
-        self.logger.debug(f'... remove_ring took {time()-t1:.2f} seconds!')
-        self.logger.debug(f'filtering and removing ring artifact took {time()-t0:.2f} seconds!')
+        logger.debug(f'Filtering and removing ring artifacts took {time()-t0:.2f} seconds')
+
         return recon_clean
 
-    def _plotEdgesOnePlane(self, recon_plane, title, path=None):
+    def _plot_edges_one_plane(self, recon_plane, title, path=None):
         vis_parameters = None#self.config.get('vis_parameters')
         if vis_parameters is None:
             weight = 0.1
         else:
             weight = vis_parameters.get('denoise_weight', 0.1)
             if not is_num(weight, ge=0.0):
-                self.logger.warning(f'Illegal weight ({weight}) in _plotEdgesOnePlane, '+
+                logger.warning(f'Invalid weight ({weight}) in _plot_edges_one_plane, '+
                         'set to a default value of 0.1')
                 weight = 0.1
         edges = denoise_tv_chambolle(recon_plane, weight=weight)
         vmax = np.max(edges[0,:,:])
         vmin = -vmax
         if path is None:
-            path='.'#self.output_folder
-        quickImshow(edges[0,:,:], f'{title} coolwarm', path=path, cmap='coolwarm')#,
-#                save_fig=self.save_plots, save_only=self.save_plots_only)
-        quickImshow(edges[0,:,:], f'{title} gray', path=path, cmap='gray', vmin=vmin, vmax=vmax)#,
-#                save_fig=self.save_plots, save_only=self.save_plots_only)
+            path = self.output_folder
+        quick_imshow(edges[0,:,:], f'{title} coolwarm', path=path, cmap='coolwarm',
+                save_fig=self.save_figs, save_only=self.save_only, block=self.block)
+        quick_imshow(edges[0,:,:], f'{title} gray', path=path, cmap='gray', vmin=vmin, vmax=vmax,
+                save_fig=self.save_figs, save_only=self.save_only, block=self.block)
         del edges
 
-    def _reconstructOneTomoStack(self, tomo_stack, thetas, center_offsets=[], num_core=1,
+    def _reconstruct_one_tomo_stack(self, tomo_stack, thetas, center_offsets=[], num_core=1,
             algorithm='gridrec'):
         """Reconstruct a single tomography stack.
         """
@@ -967,7 +1064,7 @@ class Tomo:
             centers = np.linspace(center_offsets[0], center_offsets[1], tomo_stack.shape[0])
         else:
             if center_offsets.size != tomo_stack.shape[0]:
-                raise ValueError('center_offsets dimension mismatch in reconstructOneTomoStack')
+                raise ValueError('center_offsets dimension mismatch in reconstruct_one_tomo_stack')
             centers = center_offsets
         centers += tomo_stack.shape[2]/2
 
@@ -980,43 +1077,44 @@ class Tomo:
         else:
             sigma = recon_parameters.get('stripe_fw_sigma', 2.0)
             if not is_num(sigma, ge=0):
-                logging.warning(f'Illegal stripe_fw_sigma ({sigma}) in '+
-                        '_reconstructOneTomoStack, set to a default value of 2.0')
+                logger.warning(f'Invalid stripe_fw_sigma ({sigma}) in '+
+                        '_reconstruct_one_tomo_stack, set to a default value of 2.0')
                 ring_width = 15
             secondary_iters = recon_parameters.get('secondary_iters', 0)
             if not is_int(secondary_iters, ge=0):
-                logging.warning(f'Illegal secondary_iters ({secondary_iters}) in '+
-                        '_reconstructOneTomoStack, set to a default value of 0 (skip them)')
+                logger.warning(f'Invalid secondary_iters ({secondary_iters}) in '+
+                        '_reconstruct_one_tomo_stack, set to a default value of 0 (skip them)')
                 ring_width = 0
             ring_width = recon_parameters.get('ring_width', 15)
             if not is_int(ring_width, ge=0):
-                logging.warning(f'Illegal ring_width ({ring_width}) in _reconstructOnePlane, '+
+                logger.warning(f'Invalid ring_width ({ring_width}) in _reconstruct_one_plane, '+
                         'set to a default value of 15')
                 ring_width = 15
 
         # Remove horizontal stripe
         t0 = time()
         if num_core > num_core_tomopy_limit:
-            logging.debug('running remove_stripe_fw on {num_core_tomopy_limit} cores ...')
+            logger.debug('Running remove_stripe_fw on {num_core_tomopy_limit} cores ...')
             tomo_stack = tomopy.prep.stripe.remove_stripe_fw(tomo_stack, sigma=sigma,
                     ncore=num_core_tomopy_limit)
         else:
-            logging.debug(f'running remove_stripe_fw on {num_core} cores ...')
+            logger.debug(f'Running remove_stripe_fw on {num_core} cores ...')
             tomo_stack = tomopy.prep.stripe.remove_stripe_fw(tomo_stack, sigma=sigma,
                     ncore=num_core)
-        logging.debug(f'... tomopy.prep.stripe.remove_stripe_fw took {time()-t0:.2f} seconds!')
+        logger.debug(f'... tomopy.prep.stripe.remove_stripe_fw took {time()-t0:.2f} seconds')
 
         # Perform initial image reconstruction
-        logging.debug('performing initial image reconstruction')
+        logger.debug('Performing initial image reconstruction')
         t0 = time()
-        logging.debug(f'running recon on {num_core} cores ...')
+        logger.debug(f'Running recon on {num_core} cores ...')
         tomo_recon_stack = tomopy.recon(tomo_stack, np.radians(thetas), centers,
                 sinogram_order=True, algorithm=algorithm, ncore=num_core)
-        logging.debug(f'... recon took {time()-t0:.2f} seconds!')
+        logger.debug(f'... done in {time()-t0:.2f} seconds')
+        logger.info(f'Performing initial image reconstruction took {time()-t0:.2f} seconds')
 
         # Run optional secondary iterations
         if secondary_iters > 0:
-            logging.debug(f'running {secondary_iters} secondary iterations')
+            logger.debug(f'Running {secondary_iters} secondary iterations')
             #options = {'method':'SIRT_CUDA', 'proj_type':'cuda', 'num_iter':secondary_iters}
             #RV: doesn't work for me:
             #"Error: CUDA error 803: system has unsupported display driver/cuda driver combination."
@@ -1026,30 +1124,37 @@ class Tomo:
             options = {'method':'SART', 'proj_type':'linear', 'MinConstraint': 0,
                     'num_iter':secondary_iters}
             t0 = time()
-            logging.debug(f'running recon on {num_core} cores ...')
+            logger.debug(f'Running recon on {num_core} cores ...')
             tomo_recon_stack  = tomopy.recon(tomo_stack, np.radians(thetas), centers,
                     init_recon=tomo_recon_stack, options=options, sinogram_order=True,
                     algorithm=tomopy.astra, ncore=num_core)
-            logging.debug(f'... recon took {time()-t0:.2f} seconds!')
+            logger.debug(f'... done in {time()-t0:.2f} seconds')
+            logger.info(f'Performing secondary iterations took {time()-t0:.2f} seconds')
 
         # Remove ring artifacts
         t0 = time()
-        logging.debug(f'running remove_ring on {num_core} cores ...')
         tomopy.misc.corr.remove_ring(tomo_recon_stack, rwidth=ring_width, out=tomo_recon_stack,
                 ncore=num_core)
-        logging.debug(f'... remove_ring took {time()-t0:.2f} seconds!')
+        logger.debug(f'Removing ring artifacts took {time()-t0:.2f} seconds')
 
         return tomo_recon_stack
 
 
-def run_tomo(filename:str, correction_modes:list[str], force_overwrite=False,
-        logger=logging.getLogger(__name__), num_core=-1) -> None:
-    # Check for correction modes
-    if correction_modes is None:
-        correction_modes = ['all']
-    logger.debug(f'correction_modes {type(correction_modes)} = {correction_modes}')
+def run_tomo(filename:str, modes:list[str], force_overwrite=False,
+        num_core=-1, output_folder='.', save_figs='no') -> None:
+    logging.info(f'filename = {filename}')
+    logging.debug(f'modes= {modes}')
+    logging.info(f'force_overwrite = {force_overwrite}')
+    logging.debug(f'num_core= {num_core}')
+    logging.info(f'output_folder = {output_folder}')
+    logging.info(f'save_figs = {save_figs}')
 
-    wf = TOMOWorkflow.construct_from_nexus(filename)
+    # Check for correction modes
+    if modes is None:
+        modes = ['all']
+    logger.debug(f'modes {type(modes)} = {modes}')
+
+    wf = TomoWorkflow.construct_from_nexus(filename)
     nxroot = nxload(filename, 'rw')
     nxroot.close()
 
@@ -1057,20 +1162,21 @@ def run_tomo(filename:str, correction_modes:list[str], force_overwrite=False,
         nxentry = nxroot[sample_map.title]
 
         # Instantiate Tomo object
-        tomo = Tomo(nxentry, logger, force_overwrite=force_overwrite, num_core=num_core)
+        tomo = Tomo(nxentry, force_overwrite=force_overwrite, num_core=num_core,
+                output_folder=output_folder, save_figs=save_figs)
 
         # Generate reduced tomography images
-        if 'reduce_data' in correction_modes or 'all' in correction_modes:
-            tomo.genReducedData()
+        if 'reduce_data' in modes or 'all' in modes:
+            tomo.gen_reduced_data()
 
         # Find rotation axis centers for the tomography stacks.
-        if 'find_center' in correction_modes or 'all' in correction_modes:
-            tomo.findCenters()
+        if 'find_center' in modes or 'all' in modes:
+            tomo.find_centers()
 
         # Reconstruct tomography stacks
-        if 'reconstruct_image' in correction_modes or 'all' in correction_modes:
-            tomo.reconstructTomoStacks()
+        if 'reconstruct_image' in modes or 'all' in modes:
+            tomo.reconstruct_tomo_stacks()
 
         # Combine reconstructed tomography stacks
-        if 'combine_images' in correction_modes or 'all' in correction_modes:
-            tomo.combineTomoStacks()
+        if 'combine_images' in modes or 'all' in modes:
+            tomo.combine_tomo_stacks()
