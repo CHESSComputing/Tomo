@@ -2,74 +2,96 @@
 
 import logging
 
-import sys
 import argparse
-import tracemalloc
+import pathlib
+import sys
+#import tracemalloc
 
-from tomo import Tomo
+from nexusformat.nexus import *
 
+from workflow.models import TomoWorkflow
+from workflow.run_tomo import Tomo
+
+#from memory_profiler import profile
+#@profile
 def __main__():
-
     # Parse command line arguments
     parser = argparse.ArgumentParser(
-            description='Perfrom a tomography reconstruction')
-    parser.add_argument('-i', '--input_stacks',
-            help='Preprocessed image file stacks')
-    parser.add_argument('-c', '--config',
-            help='Input config')
-    parser.add_argument('--center_offsets',
-            required=True, nargs=2, type=float, help='Reconstruction center axis offsets')
-    parser.add_argument('--output_config',
-            help='Output config')
-    parser.add_argument('--output_data',
-            help='Reconstructed tomography data')
-    parser.add_argument('-l', '--log', 
-            type=argparse.FileType('w'),
+            description='Reduce tomography data')
+    parser.add_argument('-i', '--input_file',
+            required=True,
+            type=pathlib.Path,
+            help='''Full or relative path to the input file (in Nexus format).''')
+    parser.add_argument('-c', '--center_file',
+            required=True,
+            type=pathlib.Path,
+            help='''Full or relative path to the center info file (in Nexus format).''')
+    parser.add_argument('-o', '--output_file',
+            required=False,
+            type=pathlib.Path,
+            help='''Full or relative path to the output file (in yaml format).''')
+    parser.add_argument('-l', '--log',
+#            type=argparse.FileType('w'),
             default=sys.stdout,
-            help='Log file')
+            help='Logging stream or filename')
+    parser.add_argument('--log_level',
+            choices=logging._nameToLevel.keys(),
+            default='INFO',
+            help='''Specify a preferred logging level.''')
     args = parser.parse_args()
 
-    # Starting memory monitoring
-    tracemalloc.start()
-
-    # Set basic log configuration
+    # Set log configuration
+    # When logging to file, the stdout log level defaults to WARNING
     logging_format = '%(asctime)s : %(levelname)s - %(module)s : %(funcName)s - %(message)s'
-    log_level = 'INFO'
-    level = getattr(logging, log_level.upper(), None)
-    if not isinstance(level, int):
-        raise ValueError(f'Invalid log_level: {log_level}')
-    logging.basicConfig(format=logging_format, level=level, force=True,
-            handlers=[logging.StreamHandler()])
+    level = logging.getLevelName(args.log_level)
+    if args.log is sys.stdout:
+        logging.basicConfig(format=logging_format, level=level, force=True,
+                handlers=[logging.StreamHandler()])
+    else:
+        if isinstance(args.log, str):
+            logging.basicConfig(filename=f'{args.log}', filemode='w',
+                    format=logging_format, level=level, force=True)
+        elif isinstance(args.log, io.TextIOWrapper):
+            logging.basicConfig(filemode='w', format=logging_format, level=level,
+                    stream=args.log, force=True)
+        else:
+            raise(ValueError(f'Invalid argument --log: {args.log}'))
+        stream_handler = logging.StreamHandler()
+        logging.getLogger().addHandler(stream_handler)
+        stream_handler.setLevel(logging.WARNING)
+        stream_handler.setFormatter(logging.Formatter(logging_format))
 
-    logging.debug(f'input_stacks = {args.input_stacks}')
-    logging.debug(f'config = {args.config}')
-    logging.debug(f'center_offsets = {args.center_offsets} {type(args.center_offsets)}')
-    logging.debug(f'output_config = {args.output_config}')
-    logging.debug(f'output_data = {args.output_data}')
+    # Starting memory monitoring
+#    tracemalloc.start()
+
+    # Log command line arguments
+    logging.info(f'input_file = {args.input_file}')
+    logging.info(f'center_file = {args.center_file}')
+    logging.info(f'output_file = {args.output_file}')
     logging.debug(f'log = {args.log}')
     logging.debug(f'is log stdout? {args.log is sys.stdout}')
+    logging.debug(f'log_level = {args.log_level}')
 
     # Instantiate Tomo object
-    tomo = Tomo(config_file=args.config, config_out=args.output_config, log_level=log_level,
-            log_stream=args.log, galaxy_flag=True)
-    if not tomo.is_valid:
-        raise ValueError('Invalid config file provided.')
-    logging.debug(f'config:\n{tomo.config}')
+    tomo = Tomo()
 
-    # Load preprocessed image files
-    tomo.loadTomoStacks(args.input_stacks)
+    # Read input file
+    data = tomo.read(args.input_file)
 
-    # Reconstruct tomography stacks
-    galaxy_param = {'center_offsets' : args.center_offsets, 'output_name' : args.output_data}
-    logging.info(f'galaxy_param = {galaxy_param}')
-    tomo.reconstructTomoStacks(galaxy_param)
+    # Read center data
+    center_data = tomo.read(args.center_file)
+
+    # Find the calibrated center axis info
+    data = tomo.reconstruct_data(data, center_data)
+
+    # Write output file
+    data = tomo.write(data, args.output_file)
 
     # Displaying memory usage
-    logging.info(f'Memory usage: {tracemalloc.get_traced_memory()}')
-
+#    logging.info(f'Memory usage: {tracemalloc.get_traced_memory()}')
+ 
     # stopping memory monitoring
-    tracemalloc.stop()
+#    tracemalloc.stop()
 
 if __name__ == "__main__":
     __main__()
-

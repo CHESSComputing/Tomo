@@ -1,0 +1,78 @@
+sample_maps:
+- cycle: 2021-3
+  btr: z-3234-A
+  title: z-3234-A
+  station: id3a
+  sample:
+    name: test
+    description: test sample
+  detector:
+    prefix: retiga
+    rows: 2048
+    columns: 2048
+    pixel_size:
+    - 0.0074
+    - 0.0074
+    lens_magnification: 5.0
+  tomo_fields:
+    spec_file: /nfs/chess/id3a/2021-3/z-3234-A/tenstom_1304r-1/spec.log
+    scan_numbers:
+    - 371
+    - 376
+    - 381
+    stack_info:
+    - scan_number: 371
+      starting_image_offset: 5
+      num_image: 1801
+      ref_x: 0.0
+      ref_z: -2.60302
+    - scan_number: 376
+      starting_image_offset: 5
+      num_image: 1801
+      ref_x: 0.0
+      ref_z: -1.60302
+    - scan_number: 381
+      starting_image_offset: 5
+      num_image: 1801
+      ref_x: 0.0
+      ref_z: -0.603021
+    theta_range:
+      start: -0.000254237
+      end: 179.947
+      num: 1801
+      start_index: 0
+  dark_field:
+    spec_file: /nfs/chess/id3a/2021-3/z-3234-A/tenstom_1304r-1/spec.log
+    scan_numbers:
+    - 369
+    stack_info:
+    - scan_number: 369
+      starting_image_offset: 5
+      num_image: 20
+      ref_x: 0.0
+      ref_z: -2.60302
+  bright_field:
+    spec_file: /nfs/chess/id3a/2021-3/z-3234-A/tenstom_1304r-1/spec.log
+    scan_numbers:
+    - 370
+    stack_info:
+    - scan_number: 370
+      starting_image_offset: 5
+      num_image: 20
+      ref_x: -4.0
+      ref_z: -2.60302
+  test_mode:
+    img_x_bounds:
+    - 713
+    - 1388
+    center_stack_index: 2
+    lower_row: 0
+#    lower_center_offset: 18.5
+    upper_row: 674
+#    upper_center_offset: 39.25
+    x_bounds:
+    - 600
+    - 1450
+    y_bounds:
+    - 600
+    - 1450

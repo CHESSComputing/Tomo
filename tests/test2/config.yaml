@@ -1,78 +1,65 @@
-bright_field:
-  data_path: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/370/nf
-  img_offset: 5
-  img_start: 223399
-  num: 20
-combine_stacks:
-  stacks:
-  - 1
-  - 2
-  - 3
-  x_bounds:
-  - 600
-  - 1450
-  y_bounds:
-  - 600
-  - 1450
-  z_bounds:
-  - 0
-  - 2383
-dark_field:
-  data_path: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/369/nf
-  img_offset: 5
-  img_start: 223373
-  num: 20
-data_filetype: tif
-detector:
-  columns: 2048
-  id: retiga
-  pixel_size: 0.00148
-  rows: 2048
-find_center:
-  center_stack_index: 2
-  completed: false
-  lower_center_offset: 18.0
-  lower_row: 179
-  row_bounds:
-  - 179
-  - 854
-  upper_center_offset: 39.5
-  upper_row: 853
-preprocess:
-  img_x_bounds:
-  - 538
-  - 1571
-  num_theta_skip: 0
-  zoom_perc: 100
-stack_info:
-  num: 3
-  stacks:
-  - data_path: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/371/nf
-    img_offset: 5
-    img_start: 223425
-    index: 1
-    num: 1800
-    preprocessed: false
-    reconstructed: false
-    ref_height: 0.0
-  - data_path: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/376/nf
-    img_offset: 5
-    img_start: 225336
-    index: 2
-    num: 1800
-    preprocessed: false
-    reconstructed: false
-    ref_height: 1.0
-  - data_path: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1/381/nf
-    img_offset: 5
-    img_start: 227247
-    index: 3
-    num: 1800
-    preprocessed: false
-    reconstructed: false
-    ref_height: 2.0
-theta_range:
-  end: 180.0
-  num: 1800
-  start: 0.0
-work_folder: /nfs/chess/scratch/user/rv43/2021-3/id3a/z-3234-A/tenstom_1304r-1
+sample_maps:
+- cycle: 2021-3
+  btr: z-3234-A
+  title: z-3234-A
+  station: id3a
+  sample:
+    name: tenstom_1304r-1
+  detector:
+    prefix: retiga
+    rows: 2048
+    columns: 2048
+    pixel_size:
+    - 0.0074
+    - 0.0074
+    lens_magnification: 5.0
+  tomo_fields:
+    spec_file: /nfs/chess/id3a/2021-3/z-3234-A/tenstom_1304r-1/spec.log
+    scan_numbers:
+    - 376
+    stack_info:
+    - scan_number: 376
+      starting_image_offset: 5
+      num_image: 1801
+      ref_x: 0.0
+      ref_z: -1.60302
+    theta_range:
+      start: -0.000254237
+      end: 179.947
+      num: 1801
+      start_index: 0
+  dark_field:
+    spec_file: /nfs/chess/id3a/2021-3/z-3234-A/tenstom_1304r-1/spec.log
+    scan_numbers:
+    - 374
+    stack_info:
+    - scan_number: 374
+      starting_image_offset: 5
+      num_image: 20
+      ref_x: 0.0
+      ref_z: -1.60302
+  bright_field:
+    spec_file: /nfs/chess/id3a/2021-3/z-3234-A/tenstom_1304r-1/spec.log
+    scan_numbers:
+    - 375
+    stack_info:
+    - scan_number: 375
+      starting_image_offset: 5
+      num_image: 20
+      ref_x: -4.0
+      ref_z: -1.60302
+  test_mode:
+    img_x_bounds:
+    - 582
+    - 1509
+    center_stack_index: 2
+    lower_row: 100
+#    lower_center_offset: 56.0
+    upper_row: 826
+#    upper_center_offset: 40.25
+    x_bounds:
+    - 650
+    - 1450
+    y_bounds:
+    - 650
+    - 1450

@@ -1,67 +1,62 @@
-bright_field:
-  data_path: /nfs/chess/scratch/user/rv43/2022-1/id3b/sobhani-3249-A/tomo7C/tomo7C_flat_ANDOR2_001.h5
-  img_offset: 1
-  img_start: 1
-  num: 20
-combine_stacks:
-  stacks:
-  - 1
-  x_bounds:
-  - 600
-  - 1100
-  y_bounds:
-  - 250
-  - 1450
-  z_bounds:
-  - 0
-  - 330
-dark_field:
-  data_path: null
-  img_offset: -1
-  img_start: -1
-  num: 0
-data_filetype: h5
-detector:
-  columns: 1700
-  id: andor2
-  pixel_size: 0.0013
-  rows: 1436
-find_center:
-  center_stack_index: 1
-  completed: false
-  lower_center_offset: -49.75
-  lower_row: 50
-  row_bounds:
-  - 0
-  - 330
-  upper_center_offset: -49.0
-  upper_row: 270
-preprocess:
-  img_x_bounds:
-  - 620
-  - 950
-  num_theta_skip: 0
-  zoom_perc: 100
-recon_parameters:
-  gaussian_sigma: 0.5
-  ring_width: 10
-  secondary_iters: 25
-  stripe_fw_sigma: 0.1
-stack_info:
-  num: 1
-  stacks:
-  - data_path: /nfs/chess/scratch/user/rv43/2022-1/id3b/sobhani-3249-A/tomo7C/tomo7C_ANDOR2_001.h5
-    img_offset: 1
-    img_start: 1
-    index: 1
-    num: 354
-    preprocessed: false
-    reconstructed: false
-    ref_height: 0.0
-theta_range:
-  end: 180.0
-  num: 354
-  start: 0.0
-vis_parameters:
-  denoise_weight: 0.01
-work_folder: /nfs/chess/scratch/user/rv43/2022-1/id3b/sobhani-3249-A
+sample_maps:
+- cycle: 2022-1
+  btr: sobhani-3249-A
+  title: sobhani-3249-A
+  station: id3b
+  sample:
+    name: tomo7C
+  detector:
+    prefix: andor2
+    rows: 1436
+    columns: 1700
+    pixel_size:
+    - 0.0065
+    - 0.0065
+    lens_magnification: 5.0
+  tomo_fields:
+    spec_file: /nfs/chess/scratch/user/rv43/2022-1/id3b/sobhani-3249-A/tomo7C/tomo7C
+    scan_numbers:
+    - 1
+    stack_info:
+    - scan_number: 1
+      starting_image_offset: 5
+      num_image: 360
+      ref_x: 0.0
+      ref_z: 6.1845
+    theta_range:
+      start: 0.0
+      end: 180.0
+      num: 360
+      start_index: 4
+  bright_field:
+    spec_file: /nfs/chess/scratch/user/rv43/2022-1/id3b/sobhani-3249-A/tomo7C/tomo7C_flat
+    scan_numbers:
+    - 1
+    stack_info:
+    - scan_number: 1
+      starting_image_offset: 1
+      num_image: 20
+      ref_x: 0.0
+      ref_z: 6.1845
+  test_mode:
+    img_x_bounds:
+    - 620
+    - 950
+    center_stack_index: 1
+    lower_row: 50
+#    lower_center_offset: -49.25
+    upper_row: 270
+#    upper_center_offset: -49.0
+    x_bounds:
+    - 650
+    - 1050
+    y_bounds:
+    - 270
+    - 1430
+#    recon_parameters:
+#      gaussian_sigma: 0.5
+#      ring_width: 10
+#      secondary_iters: 25
+#      stripe_fw_sigma: 0.1
+#    vis_parameters:
+#      denoise_weight: 0.01

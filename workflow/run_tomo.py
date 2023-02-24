@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
+# RV TODO FIX add find center metadata to Nexus file
+
 import logging
-logger=logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 import numpy as np
 try:
@@ -29,17 +31,54 @@ try:
     import tomopy
 except:
     pass
+from yaml import safe_load, safe_dump
 
 from msnctools.fit import Fit
-#from msnctools.general import illegal_value, is_int, is_num, is_index_range, input_int, input_num, \
-from general import illegal_value, is_int, is_num, is_index_range, input_int, input_num, \
+from msnctools.general import illegal_value, is_int, is_num, is_index_range, input_int, input_num, \
         input_yesno, input_menu, draw_mask_1d, select_image_bounds, select_one_image_bound, \
         clear_imshow, quick_imshow, clear_plot, quick_plot
 
-from .models import TomoWorkflow
-from .__version__ import __version__
+from workflow.models import import_scanparser, FlatField, TomoField, TomoWorkflow
+from workflow.__version__ import __version__
 
 num_core_tomopy_limit = 24
+
+def nxcopy(nxobject:NXobject, exclude_nxpaths:list[str]=[], nxpath_prefix:str='') -> NXobject:
+    '''Function that returns a copy of a nexus object, optionally exluding certain child items.
+
+    :param nxobject: the original nexus object to return a "copy" of
+    :type nxobject: nexusformat.nexus.NXobject
+    :param exlude_nxpaths: a list of paths to child nexus objects that
+        should be exluded from the returned "copy", defaults to `[]`
+    :type exclude_nxpaths: list[str], optional
+    :param nxpath_prefix: For use in recursive calls from inside this
+        function only!
+    :type nxpath_prefix: str
+    :return: a copy of `nxobject` with some children optionally exluded.
+    :rtype: NXobject
+    '''
+
+    nxobject_copy = nxobject.__class__()
+    if not len(nxpath_prefix):
+        if 'default' in nxobject.attrs:
+            nxobject_copy.attrs['default'] = nxobject.attrs['default']
+    else:
+        for k, v in nxobject.attrs.items():
+            nxobject_copy.attrs[k] = v
+
+    for k, v in nxobject.items():
+        nxpath = path.join(nxpath_prefix, k)
+
+        if nxpath in exclude_nxpaths:
+            continue
+
+        if isinstance(v, NXgroup):
+            nxobject_copy[k] = nxcopy(v, exclude_nxpaths=exclude_nxpaths,
+                    nxpath_prefix=path.join(nxpath_prefix, k))
+        else:
+            nxobject_copy[k] = v
+
+    return(nxobject_copy)
 
 class set_numexpr_threads:
 
@@ -58,20 +97,21 @@ class set_numexpr_threads:
 class Tomo:
     """Processing tomography data with misalignment.
     """
-    def __init__(self, nxentry, force_overwrite=False, num_core=-1, save_figs='no',
-                output_folder='.'):
+    def __init__(self, num_core=-1, output_folder='.', save_figs='no', test_mode=False):
         """Initialize with optional config input file or dictionary
         """
-        self.force_overwrite = force_overwrite
         self.num_core = num_core
         self.output_folder = path.abspath(output_folder)
         if not path.isdir(output_folder):
             mkdir(path.abspath(output_folder))
-        self.nxentry = nxentry
-        if not isinstance(self.nxentry, tree.NXentry):
-            raise ValueError(f'Invalid parameter nxentry ({nxentry})')
-        if not isinstance(self.force_overwrite, bool):
-            raise ValueError(f'Invalid parameter force_overwrite ({force_overwrite})')
+        if not isinstance(test_mode, bool):
+            raise ValueError(f'Invalid parameter test_mode ({test_mode})')
+        self.test_mode = test_mode
+        self.test_config = {}
+        if self.test_mode:
+            if save_figs != 'only':
+                logger.warning('Ignoring save_figs in test mode')
+            save_figs = 'only'
         if save_figs == 'only':
             self.save_only = True
             self.save_figs = True
@@ -96,104 +136,150 @@ class Tomo:
                     f'processors and reduced to {cpu_count()}')
             self.num_core= cpu_count()
 
-    def gen_reduced_data(self):
+    def read(self, filename):
+        extension = path.splitext(filename)[1]
+        if extension == '.yml' or extension == '.yaml':
+            with open(filename, 'r') as f:
+                config = safe_load(f)
+#            if len(config) > 1:
+#                raise ValueError(f'Multiple root entries in {filename} not yet implemented')
+#            if len(list(config.values())[0]) > 1:
+#                raise ValueError(f'Multiple sample maps in {filename} not yet implemented')
+            return(config)
+        elif extension == '.nxs':
+            with NXFile(filename, mode='r') as nxfile:
+                nxroot = nxfile.readfile()
+            return(nxroot)
+        else:
+            raise ValueError(f'Invalid filename extension ({extension})')
+
+    def write(self, data, filename):
+        extension = path.splitext(filename)[1]
+        if extension == '.yml' or extension == '.yaml':
+            with open(filename, 'w') as f:
+                safe_dump(data, f)
+        elif extension == '.nxs':
+            data.save(filename, mode='w')
+        elif extension == '.nc':
+            data.to_netcdf(path=filename)
+        else:
+            raise ValueError(f'Invalid filename extension ({extension})')
+
+    def gen_reduced_data(self, data):
         """Generate the reduced tomography images.
         """
         logger.info('Generate the reduced tomography images')
 
+        if isinstance(data, dict):
+            # Create Nexus format object from input dictionary
+            wf = TomoWorkflow(**data)
+            if len(wf.sample_maps) > 1:
+                raise ValueError(f'Multiple sample maps not yet implemented')
+#            print(f'\nwf:\n{wf}\n')
+            nxroot = NXroot()
+            t0 = time()
+            for sample_map in wf.sample_maps:
+                logger.info(f'Start constructing the {sample_map.title} map.')
+                import_scanparser(sample_map.station)
+                sample_map.construct_nxentry(nxroot, include_raw_data=False)
+            logger.info(f'Constructed all sample maps in {time()-t0:.2f} seconds.')
+            nxentry = nxroot[nxroot.attrs['default']]
+            # Get test mode configuration info
+            if self.test_mode:
+                self.test_config = data['sample_maps'][0]['test_mode']
+        else:
+            raise ValueError(f'Invalid parameter data ({data})')
+
         # Create an NXprocess to store data reduction (meta)data
-        if 'reduced_data' in self.nxentry and self.force_overwrite:
-            logger.warning(f'Existing reduced data in {self.nxentry} will be overwritten.')
-            del self.nxentry['reduced_data']
-        if 'reduced_data' in self.nxentry.data and self.force_overwrite:
-            del self.nxentry.data['reduced_data']
-        nxprocess = NXprocess()
-        self.nxentry.reduced_data = nxprocess
-        nxprocess.attrs['success'] = False
+        if 'reduced_data' in nxentry:
+            logger.warning(f'Existing reduced data in {nxentry} will be overwritten.')
+            del nxentry['reduced_data']
+        if 'data' in nxentry and 'reduced_data' in nxentry.data:
+            del nxentry.data['reduced_data']
+        nxentry.reduced_data = NXprocess()
 
         # Generate dark field
-        image_key = self.nxentry.instrument.detector.image_key
-        dark_field_indices = [index for index, key in enumerate(image_key) if key == 2]
-        if len(dark_field_indices) > 0:
-            self._gen_dark(dark_field_indices, nxprocess)
+        if 'dark_field' in nxentry['spec_scans']:
+            nxentry = self._gen_dark(nxentry)
 
         # Generate bright field
-        bright_field_indices = [index for index, key in enumerate(image_key) if key == 1]
-        self._gen_bright(bright_field_indices, nxprocess)
-
-        # Get tomo field indices for each set
-        tomo_field_indices_all = [index for index, key in enumerate(image_key) if key == 0]
-        z_translation_all = self.nxentry.sample.z_translation[tomo_field_indices_all]
-        z_translation_levels = sorted(list(set(z_translation_all)))
-        tomo_field_indices = len(z_translation_levels)*[np.array([])]
-        for i, z_translation in enumerate(z_translation_levels):
-            tomo_field_indices[i] = [tomo_field_indices_all[index]
-                    for index, z in enumerate(z_translation_all) if z == z_translation]
+        nxentry = self._gen_bright(nxentry)
 
         # Set vertical detector bounds for image stack
-        nxprocess.img_x_bounds = self._set_detector_bounds(tomo_field_indices)
+        img_x_bounds = self._set_detector_bounds(nxentry)
+        logger.info(f'img_x_bounds = {img_x_bounds}')
+        nxentry.reduced_data['img_x_bounds'] = img_x_bounds
 
         # Set zoom and/or theta skip to reduce memory the requirement
-        zoom_perc, num_theta_skip = self._set_zoom_or_skip(len(tomo_field_indices[0]))
+        zoom_perc, num_theta_skip = self._set_zoom_or_skip()
         if zoom_perc is not None:
-            nxprocess.attrs['zoom_perc'] = zoom_perc
+            nxentry.reduced_data.attrs['zoom_perc'] = zoom_perc
         if num_theta_skip is not None:
-            nxprocess.attrs['num_theta_skip'] = num_theta_skip
+            nxentry.reduced_data.attrs['num_theta_skip'] = num_theta_skip
 
         # Generate reduced tomography fields
-        self._gen_tomo(tomo_field_indices, nxprocess)
+        nxentry = self._gen_tomo(nxentry)
 
-        # Succesfull data reduction
-        nxprocess.attrs['success'] = True
+        # RV TODO FIX Remove raw data from Nexus file if exists
 
-    def find_centers(self):
+        # Add NXdata object
+        if 'data' not in nxentry:
+            nxentry.data = NXdata()
+        nxentry.attrs['default'] = 'data'
+        nxentry.data.makelink(nxentry.reduced_data.data.tomo_fields, name='reduced_data')
+        if 'rotation_angle' not in nxentry.data:
+            nxentry.data.makelink(nxentry.reduced_data.rotation_angle, name='rotation_angle')
+        nxentry.data.attrs['signal'] = 'reduced_data'
+
+        return(nxroot)
+
+    def find_centers(self, nxroot):
         """Find the calibrated center axis info
         """
         logger.info('Find the calibrated center axis info')
 
-        # Check if reduced data is available
-        if ('reduced_data' not in self.nxentry or not self.nxentry.reduced_data.attrs['success'] or
-                'reduced_data' not in self.nxentry.data):
-            raise KeyError(f'Unable to find valid reduced data in {self.nxentry}.')
+        if not isinstance(nxroot, NXroot):
+            raise ValueError(f'Invalid parameter nxroot ({nxroot})')
+        nxentry = nxroot[nxroot.attrs['default']]
+        if not isinstance(nxentry, NXentry):
+            raise ValueError(f'Invalid nxentry ({nxentry})')
 
-        # Create an NXprocess to store calibrated center axis info (meta)data
-        if 'find_center' in self.nxentry and self.force_overwrite:
-            logger.warning(f'Existing calibrated center axis info in {self.nxentry} will be '+
-                    'overwritten.')
-            del self.nxentry['find_center']
-        nxprocess = NXprocess()
-        self.nxentry.find_center = nxprocess
-        nxprocess.attrs['success'] = False
+        # Check if reduced data is available
+        if ('reduced_data' not in nxentry or 'reduced_data' not in nxentry.data):
+            raise KeyError(f'Unable to find valid reduced data in {nxentry}.')
 
         # Select the image stack to calibrate the center axis
         #   reduced data axes order: stack,row,theta,column
         #   Note: Nexus cannot follow a link if the data it points to is too big,
-        #         so get the data from the actual place, not from self.nxentry.data
-        num_tomo_stacks = self.nxentry.reduced_data.data.tomo_fields.shape[0]
+        #         so get the data from the actual place, not from nxentry.data
+        num_tomo_stacks = nxentry.reduced_data.data.tomo_fields.shape[0]
         if num_tomo_stacks == 1:
             center_stack_index = 0
-            center_stack = np.asarray(self.nxentry.reduced_data.data.tomo_fields[0])
+            center_stack = np.asarray(nxentry.reduced_data.data.tomo_fields[0])
             if not center_stack.size:
                 raise KeyError('Unable to load the required reduced tomography stack')
             default = 'n'
         else:
-            center_stack_index = input_int('\nEnter tomography stack index to calibrate the '
-                    'center axis', ge=0, le=num_tomo_stacks-1, default=int(num_tomo_stacks/2))
+            if self.test_mode:
+                center_stack_index = self.test_config['center_stack_index']-1 # make offset 0
+            else:
+                center_stack_index = input_int('\nEnter tomography stack index to calibrate the '
+                        'center axis', ge=0, le=num_tomo_stacks-1, default=int(num_tomo_stacks/2))
             center_stack = \
-                    np.asarray(self.nxentry.reduced_data.data.tomo_fields[center_stack_index])
+                    np.asarray(nxentry.reduced_data.data.tomo_fields[center_stack_index])
             if not center_stack.size:
                 raise KeyError('Unable to load the required reduced tomography stack')
             default = 'y'
 
         # Get thetas (in degrees)
-        thetas = np.asarray(self.nxentry.reduced_data.rotation_angle)
+        thetas = np.asarray(nxentry.reduced_data.rotation_angle)
 
         # Get effective pixel_size
-        if 'zoom_perc' in self.nxentry.reduced_data:
-            eff_pixel_size = 100.*(self.nxentry.instrument.detector.x_pixel_size/
-                self.nxentry.reduced_data.attrs['zoom_perc'])
+        if 'zoom_perc' in nxentry.reduced_data:
+            eff_pixel_size = 100.*(nxentry.instrument.detector.x_pixel_size/
+                nxentry.reduced_data.attrs['zoom_perc'])
         else:
-            eff_pixel_size = self.nxentry.instrument.detector.x_pixel_size
+            eff_pixel_size = nxentry.instrument.detector.x_pixel_size
 
         # Get cross sectional diameter
         cross_sectional_dim = center_stack.shape[2]*eff_pixel_size
@@ -204,86 +290,94 @@ class Tomo:
 
         # Lower row center
         # center_stack order: row,theta,column
-        lower_row = select_one_image_bound(center_stack[:,0,:], 0, bound=0,
-                title=f'theta={round(thetas[0], 2)+0}', bound_name='row index to find lower center',
-                default=default)
+        if self.test_mode:
+            lower_row = self.test_config['lower_row']
+        else:
+            lower_row = select_one_image_bound(center_stack[:,0,:], 0, bound=0,
+                    title=f'theta={round(thetas[0], 2)+0}',
+                    bound_name='row index to find lower center', default=default)
         lower_center_offset = self._find_center_one_plane(center_stack[lower_row,:,:], lower_row,
                 thetas, eff_pixel_size, cross_sectional_dim, num_core=self.num_core)
         logger.debug(f'lower_row = {lower_row:.2f}')
         logger.debug(f'lower_center_offset = {lower_center_offset:.2f}')
 
         # Upper row center
-        upper_row = select_one_image_bound(center_stack[:,0,:], 0, bound=center_stack.shape[0]-1,
-                title=f'theta={round(thetas[0], 2)+0}', bound_name='row index to find upper center',
-                default=default)
+        if self.test_mode:
+            upper_row = self.test_config['upper_row']
+        else:
+            upper_row = select_one_image_bound(center_stack[:,0,:], 0,
+                    bound=center_stack.shape[0]-1, title=f'theta={round(thetas[0], 2)+0}',
+                    bound_name='row index to find upper center', default=default)
         upper_center_offset = self._find_center_one_plane(center_stack[upper_row,:,:], upper_row,
                 thetas, eff_pixel_size, cross_sectional_dim, num_core=self.num_core)
         logger.debug(f'upper_row = {upper_row:.2f}')
         logger.debug(f'upper_center_offset = {upper_center_offset:.2f}')
         del center_stack
 
-        # Add center info to find center NXprocess
-        t0 = time()
-        logger.info(f'Updating the Nexus file ... ')
+        center_config = {'lower_row': lower_row, 'lower_center_offset': lower_center_offset,
+                'upper_row': upper_row, 'upper_center_offset': upper_center_offset}
         if num_tomo_stacks > 1:
-            nxprocess.center_stack_index = center_stack_index
-        nxprocess.lower_row = lower_row
-        nxprocess.lower_center_offset = lower_center_offset
-        nxprocess.upper_row = upper_row
-        nxprocess.upper_center_offset = upper_center_offset
-        nxprocess.attrs['success'] = True
-        logger.debug(f'... done in {time()-t0:.2f} seconds')
-        logger.info(f'Updating the Nexus file took {time()-t0:.2f} seconds')
+            center_config['center_stack_index'] = center_stack_index+1 # save as offset 1
 
-    def reconstruct_tomo_stacks(self):
-        """Reconstruct the tomography stacks.
+        # Save test data to file
+        if self.test_mode:
+            with open(f'{self.output_folder}/center_config.yaml', 'w') as f:
+                safe_dump(center_config, f)
+
+        return(center_config)
+
+    def reconstruct_data(self, nxroot, center_info):
+        """Reconstruct the tomography data.
         """
-        logger.info('Reconstruct the tomography stacks')
+        logger.info('Reconstruct the tomography data')
+
+        if not isinstance(nxroot, NXroot):
+            raise ValueError(f'Invalid parameter nxroot ({nxroot})')
+        nxentry = nxroot[nxroot.attrs['default']]
+        if not isinstance(nxentry, NXentry):
+            raise ValueError(f'Invalid nxentry ({nxentry})')
+        if not isinstance(center_info, dict):
+            raise ValueError(f'Invalid parameter center_info ({center_info})')
 
         # Check if reduced data is available
-        if ('reduced_data' not in self.nxentry or not self.nxentry.reduced_data.attrs['success'] or
-                'reduced_data' not in self.nxentry.data):
-            raise KeyError(f'Unable to find valid reduced data in {self.nxentry}.')
-
-        # Check if calibrated center axis info is available
-        if 'find_center' not in self.nxentry or not self.nxentry.find_center.attrs['success']:
-            raise KeyError(f'Unable to find valid calibrated center axis info in {self.nxentry}.')
+        if ('reduced_data' not in nxentry or 'reduced_data' not in nxentry.data):
+            raise KeyError(f'Unable to find valid reduced data in {nxentry}.')
 
         # Create an NXprocess to store image reconstruction (meta)data
-        if 'reconstructed_image_data' in self.nxentry and self.force_overwrite:
-            logger.warning(f'Existing reconstructed image data in {self.nxentry} will be '+
-                    'overwritten.')
-            del self.nxentry['reconstructed_image_data']
-        if 'reconstructed_images' in self.nxentry.data and self.force_overwrite:
-            del self.nxentry.data['reconstructed_images']
+#        if 'reconstructed_data' in nxentry:
+#            logger.warning(f'Existing reconstructed data in {nxentry} will be overwritten.')
+#            del nxentry['reconstructed_data']
+#        if 'data' in nxentry and 'reconstructed_data' in nxentry.data:
+#            del nxentry.data['reconstructed_data']
         nxprocess = NXprocess()
-        self.nxentry.reconstructed_image_data = nxprocess
-        nxprocess.attrs['success'] = False
 
         # Get rotation axis rows and centers
-        lower_row = self.nxentry.find_center.lower_row
-        lower_center_offset = self.nxentry.find_center.lower_center_offset
-        upper_row = self.nxentry.find_center.upper_row
-        upper_center_offset = self.nxentry.find_center.upper_center_offset
+        lower_row = center_info.get('lower_row')
+        lower_center_offset = center_info.get('lower_center_offset')
+        upper_row = center_info.get('upper_row')
+        upper_center_offset = center_info.get('upper_center_offset')
+        if (lower_row is None or lower_center_offset is None or upper_row is None or
+                upper_center_offset is None):
+            raise KeyError(f'Unable to find valid calibrated center axis info in {center_info}.')
         center_slope = (upper_center_offset-lower_center_offset)/(upper_row-lower_row)
 
         # Get thetas (in degrees)
-        thetas = np.asarray(self.nxentry.reduced_data.rotation_angle)
+        thetas = np.asarray(nxentry.reduced_data.rotation_angle)
 
-        # Reconstruct tomo stacks
+        # Reconstruct tomography data
         #   reduced data axes order: stack,row,theta,column
-        #   reconstructed image data order in each stack: row/z,x,y
+        #   reconstructed data order in each stack: row/z,x,y
         #   Note: Nexus cannot follow a link if the data it points to is too big,
-        #         so get the data from the actual place, not from self.nxentry.data
-        if 'zoom_perc' in self.nxentry.reduced_data:
-            res_title = f'{self.nxentry.reduced_data.attrs["zoom_perc"]}p'
+        #         so get the data from the actual place, not from nxentry.data
+        if 'zoom_perc' in nxentry.reduced_data:
+            res_title = f'{nxentry.reduced_data.attrs["zoom_perc"]}p'
         else:
             res_title = 'fullres'
         load_error = False
-        num_tomo_stacks = self.nxentry.reduced_data.data.tomo_fields.shape[0]
+        num_tomo_stacks = nxentry.reduced_data.data.tomo_fields.shape[0]
         tomo_recon_stacks = num_tomo_stacks*[np.array([])]
         for i in range(num_tomo_stacks):
-            tomo_stack = np.asarray(self.nxentry.reduced_data.data.tomo_fields[i])
+            tomo_stack = np.asarray(nxentry.reduced_data.data.tomo_fields[i])
             if not tomo_stack.size:
                 raise KeyError(f'Unable to load tomography stack {i} for reconstruction')
             assert(0 <= lower_row < upper_row < tomo_stack.shape[0])
@@ -295,206 +389,236 @@ class Tomo:
                     center_offsets=center_offsets, num_core=self.num_core, algorithm='gridrec')
             logger.debug(f'... done in {time()-t0:.2f} seconds')
             logger.info(f'Reconstruction of stack {i} took {time()-t0:.2f} seconds')
-            x_slice = int(tomo_recon_stack.shape[0]/2)
-            if num_tomo_stacks == 1:
-                basetitle = 'recon'
-            else:
-                basetitle = f'recon stack {i}'
-            title = f'{basetitle} {res_title} xslice{x_slice}'
-            quick_imshow(tomo_recon_stack[x_slice,:,:], title=title, path=self.output_folder,
-                    save_fig=self.save_figs, save_only=self.save_only, block=self.block)
-            y_slice = int(tomo_recon_stack.shape[1]/2)
-            title = f'{basetitle} {res_title} yslice{y_slice}'
-            quick_imshow(tomo_recon_stack[:,y_slice,:], title=title, path=self.output_folder,
-                    save_fig=self.save_figs, save_only=self.save_only, block=self.block)
-            z_slice = int(tomo_recon_stack.shape[2]/2)
-            title = f'{basetitle} {res_title} zslice{z_slice}'
-            quick_imshow(tomo_recon_stack[:,:,z_slice], title=title, path=self.output_folder,
-                    save_fig=self.save_figs, save_only=self.save_only, block=self.block)
 
             # Combine stacks
             tomo_recon_stacks[i] = tomo_recon_stack
 
+        # Resize the reconstructed tomography data
+        #   reconstructed data order in each stack: row/z,x,y
+        if self.test_mode:
+            x_bounds = self.test_config.get('x_bounds')
+            y_bounds = self.test_config.get('y_bounds')
+            z_bounds = None
+        else:
+            x_bounds, y_bounds, z_bounds = self._resize_reconstructed_data(tomo_recon_stacks)
+        if x_bounds is None:
+            x_range = (0, tomo_recon_stacks[0].shape[1])
+            x_slice = int(x_range[1]/2)
+        else:
+            x_range = tuple(x_bounds)
+            x_slice = int((x_bounds[0]+x_bounds[1])/2)
+        if y_bounds is None:
+            y_range = (0, tomo_recon_stacks[0].shape[2])
+            y_slice = int(y_range[1]/2)
+        else:
+            y_range = tuple(y_bounds)
+            y_slice = int((y_bounds[0]+y_bounds[1])/2)
+        if z_bounds is None:
+            z_range = (0, tomo_recon_stacks[0].shape[0])
+            z_slice = int(z_range[1]/2)
+        else:
+            z_range = tuple(z_bounds)
+            z_slice = int((z_bounds[0]+z_bounds[1])/2)
+
+        # Create a few reconstructed image slice plots
+        if num_tomo_stacks == 1:
+            basetitle = 'recon'
+        else:
+            basetitle = f'recon stack {i}'
+        for i, stack in enumerate(tomo_recon_stacks):
+            title = f'{basetitle} {res_title} xslice{x_slice}'
+            quick_imshow(stack[z_range[0]:z_range[1],x_slice,y_range[0]:y_range[1]],
+                    title=title, path=self.output_folder, save_fig=self.save_figs,
+                    save_only=self.save_only, block=self.block)
+            title = f'{basetitle} {res_title} yslice{y_slice}'
+            quick_imshow(stack[z_range[0]:z_range[1],x_range[0]:x_range[1],y_slice],
+                    title=title, path=self.output_folder, save_fig=self.save_figs,
+                    save_only=self.save_only, block=self.block)
+            title = f'{basetitle} {res_title} zslice{z_slice}'
+            quick_imshow(stack[z_slice,x_range[0]:x_range[1],y_range[0]:y_range[1]],
+                    title=title, path=self.output_folder, save_fig=self.save_figs,
+                    save_only=self.save_only, block=self.block)
+
+        # Save test data to file
+        #   reconstructed data order in each stack: row/z,x,y
+        if self.test_mode:
+            for i, stack in enumerate(tomo_recon_stacks):
+                np.savetxt(f'{self.output_folder}/recon_stack_{i+1}.txt',
+                        stack[z_slice,x_range[0]:x_range[1],y_range[0]:y_range[1]], fmt='%.6e')
+
         # Add image reconstruction to reconstructed data NXprocess
-        t0 = time()
-        logger.info(f'Updating the Nexus file ...')
-        nxdata = NXdata()
-        nxprocess.data = nxdata
-        nxdata['reconstructed_images'] = tomo_recon_stacks
-        nxdata.attrs['signal'] = 'reconstructed_images'
+        #   reconstructed data order in each stack: row/z,x,y
+        nxprocess.data = NXdata()
         nxprocess.attrs['default'] = 'data'
-        self.nxentry.data.makelink(nxprocess.data.reconstructed_images, name='reconstructed_images')
-        self.nxentry.data.attrs['signal'] = 'reconstructed_images'
-        logger.debug(f'... done in {time()-t0:.2f} seconds')
-        logger.info(f'Updating the Nexus file took {time()-t0:.2f} seconds')
+        for k, v in center_info.items():
+            nxprocess[k] = v
+        if x_bounds is not None:
+            nxprocess.x_bounds = x_bounds
+        if y_bounds is not None:
+            nxprocess.y_bounds = y_bounds
+        if z_bounds is not None:
+            nxprocess.z_bounds = z_bounds
+        nxprocess.data['reconstructed_data'] = np.asarray([stack[z_range[0]:z_range[1],
+                x_range[0]:x_range[1],y_range[0]:y_range[1]] for stack in tomo_recon_stacks])
+        nxprocess.data.attrs['signal'] = 'reconstructed_data'
 
-        # Succesfull image reconstruction
-        nxprocess.attrs['success'] = True
+        # Create a copy of the input Nexus object and remove reduced data if requested
+        exclude_items = [f'{nxentry._name}/reduced_data/data', f'{nxentry._name}/data/reduced_data']
+        nxroot_copy = nxcopy(nxroot, exclude_nxpaths=exclude_items)
 
-    def combine_tomo_stacks(self, galaxy_param=None):
+        # Add the reconstructed data NXprocess to the new Nexus object
+        nxentry_copy = nxroot_copy[nxroot_copy.attrs['default']]
+        nxentry_copy.reconstructed_data = nxprocess
+        if 'data' not in nxentry_copy:
+            nxentry_copy.data = NXdata()
+        nxentry_copy.attrs['default'] = 'data'
+        nxentry_copy.data.makelink(nxprocess.data.reconstructed_data, name='reconstructed_data')
+        nxentry_copy.data.attrs['signal'] = 'reconstructed_data'
+
+        return(nxroot_copy)
+
+    def combine_data(self, nxroot):
         """Combine the reconstructed tomography stacks.
         """
         logger.info('Combine the reconstructed tomography stacks')
 
-        # Check if reconstructed images data is available
-        if ('reconstructed_image_data' not in self.nxentry or
-                not self.nxentry.reconstructed_image_data.attrs['success'] or
-                'reconstructed_images' not in self.nxentry.data):
-            raise KeyError(f'Unable to find valid reconstructed image data in {self.nxentry}.')
+        if not isinstance(nxroot, NXroot):
+            raise ValueError(f'Invalid parameter nxroot ({nxroot})')
+        nxentry = nxroot[nxroot.attrs['default']]
+        if not isinstance(nxentry, NXentry):
+            raise ValueError(f'Invalid nxentry ({nxentry})')
+
+        # Check if reconstructed image data is available
+        if ('reconstructed_data' not in nxentry or 'reconstructed_data' not in nxentry.data):
+            raise KeyError(f'Unable to find valid reconstructed image data in {nxentry}.')
 
         # Create an NXprocess to store combined image reconstruction (meta)data
-        if 'combined_image_data' in self.nxentry and self.force_overwrite:
-            logger.warning(f'Existing combined reconstructed image data in {self.nxentry} '+
-                    'will be overwritten.')
-            del self.nxentry['combined_image_data']
-        if 'combined_image' in self.nxentry.data and self.force_overwrite:
-            del self.nxentry.data['combined_image']
+#        if 'combined_data' in nxentry:
+#            logger.warning(f'Existing combined data in {nxentry} will be overwritten.')
+#            del nxentry['combined_data']
+#        if 'data' in nxentry 'combined_data' in nxentry.data:
+#            del nxentry.data['combined_data']
         nxprocess = NXprocess()
-        self.nxentry.combined_image_data = nxprocess
-        nxprocess.attrs['success'] = False
 
-        # Get the reconstructed image data stack
-        #   reconstructed image stack order: stack,row(z),x,y
+        # Get the reconstructed data
+        #   reconstructed data order: stack,row(z),x,y
         #   Note: Nexus cannot follow a link if the data it points to is too big,
-        #         so get the data from the actual place, not from self.nxentry.data
-        tomo_recon_stacks = \
-                np.asarray(self.nxentry.reconstructed_image_data.data.reconstructed_images)
+        #         so get the data from the actual place, not from nxentry.data
+        tomo_recon_stacks = np.asarray(nxentry.reconstructed_data.data.reconstructed_data)
         num_tomo_stacks = tomo_recon_stacks.shape[0]
-
-        # Selecting x bounds (in yz-plane)
-        tomosum = 0
-        [tomosum := tomosum+np.sum(tomo_recon_stacks[i], axis=(0,2))
-                for i in range(num_tomo_stacks)]
-        select_x_bounds = input_yesno('\nDo you want to change the image x-bounds (y/n)?', 'y')
-        if not select_x_bounds:
-            x_bounds = [0, tomosum.size]
-        else:
-            accept = False
-            index_ranges = None
-            while not accept:
-                mask, x_bounds = draw_mask_1d(tomosum, current_index_ranges=index_ranges,
-                        title='select x data range', legend='recon stack sum yz')
-                while len(x_bounds) != 1:
-                    print('Please select exactly one continuous range')
-                    mask, x_bounds = draw_mask_1d(tomosum, title='select x data range',
-                            legend='recon stack sum yz')
-                x_bounds = list(x_bounds[0])
-#                quick_plot(tomosum, vlines=x_bounds, title='recon stack sum yz')
-#                print(f'x_bounds = {x_bounds} (lower bound inclusive, upper bound '+
-#                        'exclusive)')
-#                accept = input_yesno('Accept these bounds (y/n)?', 'y')
-                accept = True
-        logger.debug(f'x_bounds = {x_bounds}')
-
-        # Selecting y bounds (in xz-plane)
-        tomosum = 0
-        [tomosum := tomosum+np.sum(tomo_recon_stacks[i], axis=(0,1))
-                for i in range(num_tomo_stacks)]
-        select_y_bounds = input_yesno('\nDo you want to change the image y-bounds (y/n)?', 'y')
-        if not select_y_bounds:
-            y_bounds = [0, tomosum.size]
-        else:
-            accept = False
-            index_ranges = None
-            while not accept:
-                mask, y_bounds = draw_mask_1d(tomosum, current_index_ranges=index_ranges,
-                        title='select x data range', legend='recon stack sum xz')
-                while len(y_bounds) != 1:
-                    print('Please select exactly one continuous range')
-                    mask, y_bounds = draw_mask_1d(tomosum, title='select x data range',
-                            legend='recon stack sum xz')
-                y_bounds = list(y_bounds[0])
-#                quick_plot(tomosum, vlines=y_bounds, title='recon stack sum xz')
-#                print(f'y_bounds = {y_bounds} (lower bound inclusive, upper bound '+
-#                        'exclusive)')
-#                accept = input_yesno('Accept these bounds (y/n)?', 'y')
-                accept = True
-        logger.debug(f'y_bounds = {y_bounds}')
-
-        # Combine reconstructed tomography stacks
+        if num_tomo_stacks == 1:
+            return(nxroot)
         t0 = time()
         logger.debug(f'Combining the reconstructed stacks ...')
-        tomo_recon_combined = tomo_recon_stacks[0][:,x_bounds[0]:x_bounds[1],
-                y_bounds[0]:y_bounds[1]]
+        tomo_recon_combined = tomo_recon_stacks[0,:,:,:]
         if num_tomo_stacks > 2:
             tomo_recon_combined = np.concatenate([tomo_recon_combined]+
-                    [tomo_recon_stacks[i][:,x_bounds[0]:x_bounds[1],y_bounds[0]:y_bounds[1]]
-                    for i in range(1, num_tomo_stacks-1)])
+                    [tomo_recon_stacks[i,:,:,:] for i in range(1, num_tomo_stacks-1)])
         if num_tomo_stacks > 1:
             tomo_recon_combined = np.concatenate([tomo_recon_combined]+
-                    [tomo_recon_stacks[num_tomo_stacks-1][:,x_bounds[0]:x_bounds[1],
-                    y_bounds[0]:y_bounds[1]]])
+                    [tomo_recon_stacks[num_tomo_stacks-1,:,:,:]])
         logger.debug(f'... done in {time()-t0:.2f} seconds')
         logger.info(f'Combining the reconstructed stacks took {time()-t0:.2f} seconds')
 
-        # Selecting z bounds (in xy-plane)
-        tomosum = np.sum(tomo_recon_combined, axis=(1,2))
-        select_z_bounds = input_yesno('\nDo you want to change the image z-bounds (y/n)?', 'n')
-        if not select_z_bounds:
-            z_bounds = [0, tomosum.size]
+        # Resize the combined tomography data set
+        #   combined data order: row/z,x,y
+        if self.test_mode:
+            x_bounds = None
+            y_bounds = None
+            z_bounds = self.test_config.get('z_bounds')
         else:
-            accept = False
-            index_ranges = None
-            while not accept:
-                mask, z_bounds = draw_mask_1d(tomosum, current_index_ranges=index_ranges,
-                        title='select x data range', legend='recon stack sum xy')
-                while len(z_bounds) != 1:
-                    print('Please select exactly one continuous range')
-                    mask, z_bounds = draw_mask_1d(tomosum, title='select x data range',
-                            legend='recon stack sum xy')
-                z_bounds = list(z_bounds[0])
-#                quick_plot(tomosum, vlines=z_bounds, title='recon stack sum xy')
-#                print(f'z_bounds = {z_bounds} (lower bound inclusive, upper bound '+
-#                        'exclusive)')
-#                accept = input_yesno('Accept these bounds (y/n)?', 'y')
-                accept = True
-        logger.debug(f'z_bounds = {z_bounds}')
+            x_bounds, y_bounds, z_bounds = self._resize_reconstructed_data(tomo_recon_combined,
+                    z_only=True)
+        if x_bounds is None:
+            x_range = (0, tomo_recon_combined.shape[1])
+            x_slice = int(x_range[1]/2)
+        else:
+            x_range = x_bounds
+            x_slice = int((x_bounds[0]+x_bounds[1])/2)
+        if y_bounds is None:
+            y_range = (0, tomo_recon_combined.shape[2])
+            y_slice = int(y_range[1]/2)
+        else:
+            y_range = y_bounds
+            y_slice = int((y_bounds[0]+y_bounds[1])/2)
+        if z_bounds is None:
+            z_range = (0, tomo_recon_combined.shape[0])
+            z_slice = int(z_range[1]/2)
+        else:
+            z_range = z_bounds
+            z_slice = int((z_bounds[0]+z_bounds[1])/2)
 
-        quick_imshow(tomo_recon_combined[int(tomo_recon_combined.shape[0]/2),:,:],
-                title=f'recon combined xslice{int(tomo_recon_combined.shape[0]/2)}',
-                path=self.output_folder, save_fig=self.save_figs, save_only=self.save_only,
-                block=self.block)
-        quick_imshow(tomo_recon_combined[:,int(tomo_recon_combined.shape[1]/2),:],
-                title=f'recon combined yslice{int(tomo_recon_combined.shape[1]/2)}',
-                path=self.output_folder, save_fig=self.save_figs, save_only=self.save_only,
-                block=self.block)
-        quick_imshow(tomo_recon_combined[:,:,int(tomo_recon_combined.shape[2]/2)],
-                title=f'recon combined zslice{int(tomo_recon_combined.shape[2]/2)}',
-                path=self.output_folder, save_fig=self.save_figs, save_only=self.save_only,
-                block=self.block)
+        # Create a few combined image slice plots
+        quick_imshow(tomo_recon_combined[z_range[0]:z_range[1],x_slice,y_range[0]:y_range[1]],
+                title=f'recon combined xslice{x_slice}', path=self.output_folder,
+                save_fig=self.save_figs, save_only=self.save_only, block=self.block)
+        quick_imshow(tomo_recon_combined[z_range[0]:z_range[1],x_range[0]:x_range[1],y_slice],
+                title=f'recon combined yslice{y_slice}', path=self.output_folder,
+                save_fig=self.save_figs, save_only=self.save_only, block=self.block)
+        quick_imshow(tomo_recon_combined[z_slice,x_range[0]:x_range[1],y_range[0]:y_range[1]],
+                title=f'recon combined zslice{z_slice}', path=self.output_folder,
+                save_fig=self.save_figs, save_only=self.save_only, block=self.block)
 
-        # Add combined image reconstruction to combined image data NXprocess
-        t0 = time()
-        logger.info(f'Updating the Nexus file ...')
-        nxdata = NXdata()
-        nxprocess.data = nxdata
-        nxdata['combined_image'] = tomo_recon_combined
-        nxdata.attrs['signal'] = 'combined_image'
+        # Save test data to file
+        #   combined data order: row/z,x,y
+        if self.test_mode:
+            np.savetxt(f'{self.output_folder}/recon_combined.txt', tomo_recon_combined[
+                    z_slice,x_range[0]:x_range[1],y_range[0]:y_range[1]], fmt='%.6e')
+
+        # Add image reconstruction to reconstructed data NXprocess
+        #   combined data order: row/z,x,y
+        nxprocess.data = NXdata()
         nxprocess.attrs['default'] = 'data'
-        self.nxentry.data.makelink(nxprocess.data.combined_image, name='combined_image')
-        self.nxentry.data.attrs['signal'] = 'combined_image'
-        if select_x_bounds:
+        if x_bounds is not None:
             nxprocess.x_bounds = x_bounds
-        if select_y_bounds:
+        if y_bounds is not None:
             nxprocess.y_bounds = y_bounds
-        if select_z_bounds:
+        if z_bounds is not None:
             nxprocess.z_bounds = z_bounds
-        logger.debug(f'... done in {time()-t0:.2f} seconds')
-        logger.info(f'Updating the Nexus file took {time()-t0:.2f} seconds')
+        nxprocess.data['combined_data'] = tomo_recon_combined
+        nxprocess.data.attrs['signal'] = 'combined_data'
 
-        # Succesfull image reconstruction
-        nxprocess.attrs['success'] = True
+        # Create a copy of the input Nexus object and remove reconstructed data if requested
+        exclude_items = [f'{nxentry._name}/reconstructed_data/data',
+                f'{nxentry._name}/data/reconstructed_data']
+        nxroot_copy = nxcopy(nxroot, exclude_nxpaths=exclude_items)
 
+        # Add the combined data NXprocess to the new Nexus object
+        nxentry_copy = nxroot_copy[nxroot_copy.attrs['default']]
+        nxentry_copy.combined_data = nxprocess
+        if 'data' not in nxentry_copy:
+            nxentry_copy.data = NXdata()
+        nxentry_copy.attrs['default'] = 'data'
+        nxentry_copy.data.makelink(nxprocess.data.combined_data, name='combined_data')
+        nxentry_copy.data.attrs['signal'] = 'combined_data'
 
-    def _gen_dark(self, dark_field_indices, nxprocess):
+        return(nxroot_copy)
+
+    def _gen_dark(self, nxentry):
         """Generate dark field.
         """
-        # Get the bright field images
-        tdf_stack = self.nxentry.instrument.detector.data[dark_field_indices,:,:]
+        # Get the dark field images
+        image_key = nxentry.instrument.detector.get('image_key', None)
+        if image_key and data in nxentry.instrument.detector:
+            exit('TODO')
+            field_indices = [index for index, key in enumerate(image_key) if key == 2]
+            tdf_stack = nxentry.instrument.detector.data[field_indices,:,:]
+        else:
+            dark_field_scans = nxentry.spec_scans.dark_field
+            dark_field = FlatField.construct_from_nxcollection(dark_field_scans)
+            prefix = str(nxentry.instrument.detector.local_name)
+            tdf_stack = dark_field.get_detector_data(prefix)
+            if isinstance(tdf_stack, list):
+                exit('TODO')
 
         # Take median
-        tdf = np.median(tdf_stack, axis=0)
-        del tdf_stack
+        if tdf_stack.ndim == 2:
+            tdf = tdf_stack
+        elif tdf_stack.ndim == 3:
+            tdf = np.median(tdf_stack, axis=0)
+            del tdf_stack
+        else:
+           raise ValueError(f'Invalid tdf_stack shape ({tdf_stack.shape})')
 
         # Remove dark field intensities above the cutoff
 #RV        tdf_cutoff = None
@@ -517,22 +641,35 @@ class Tomo:
 #            quick_imshow(tdf, title='dark field', path=self.output_folder,
 #                    save_fig=self.save_figs, save_only=self.save_only)
 #        quick_imshow(tdf, title='dark field', block=True)
-        quick_imshow(tdf, title='dark field', path=self.output_folder, save_fig=self.save_figs,
-                save_only=self.save_only)
-        clear_imshow('dark field')
+        if not self.test_mode:
+            quick_imshow(tdf, title='dark field', path=self.output_folder, save_fig=self.save_figs,
+                    save_only=self.save_only)
+            clear_imshow('dark field')
 
         # Add dark field to reduced data NXprocess
-        nxdata = NXdata()
-        nxprocess.data = nxdata
-        nxdata['dark_field'] = tdf
+        nxentry.reduced_data.data = NXdata()
+        nxentry.reduced_data.data['dark_field'] = tdf
 
-    def _gen_bright(self, bright_field_indices, nxprocess):
+        return(nxentry)
+
+    def _gen_bright(self, nxentry):
         """Generate bright field.
         """
         # Get the bright field images
-        tbf_stack = self.nxentry.instrument.detector.data[bright_field_indices,:,:]
+        image_key = nxentry.instrument.detector.get('image_key', None)
+        if image_key and data in nxentry.instrument.detector:
+            exit('TODO')
+            field_indices = [index for index, key in enumerate(image_key) if key == 1]
+            tbf_stack = nxentry.instrument.detector.data[field_indices,:,:]
+        else:
+            bright_field_scans = nxentry.spec_scans.bright_field
+            bright_field = FlatField.construct_from_nxcollection(bright_field_scans)
+            prefix = str(nxentry.instrument.detector.local_name)
+            tbf_stack = bright_field.get_detector_data(prefix)
+            if isinstance(tbf_stack, list):
+                exit('TODO')
 
-        # Take median
+        # Take median if more than one image
         """Median or mean: It may be best to try the median because of some image 
            artifacts that arise due to crinkles in the upstream kapton tape windows 
            causing some phase contrast images to appear on the detector.
@@ -542,12 +679,17 @@ class Tomo:
            beam because there is frame to frame fluctuations from the incoming beam. 
            We don’t typically account for them but potentially could.
         """
-        tbf = np.median(tbf_stack, axis=0)
-        del tbf_stack
+        if tbf_stack.ndim == 2:
+            tbf = tbf_stack
+        elif tbf_stack.ndim == 3:
+            tbf = np.median(tbf_stack, axis=0)
+            del tbf_stack
+        else:
+           raise ValueError(f'Invalid tbf_stack shape ({tbf_stacks.shape})')
 
         # Subtract dark field
-        if 'data' in nxprocess:
-            tbf -= nxprocess.data.dark_field
+        if 'data' in nxentry.reduced_data and 'dark_field' in nxentry.reduced_data.data:
+            tbf -= nxentry.reduced_data.data.dark_field
         else:
             logger.warning('Dark field unavailable')
 
@@ -562,30 +704,53 @@ class Tomo:
 #            quick_imshow(tbf, title='bright field', path=self.output_folder,
 #                    save_fig=self.save_figs, save_only=self.save_only)
 #        quick_imshow(tbf, title='bright field', block=True)
-        quick_imshow(tbf, title='bright field', path=self.output_folder, save_fig=self.save_figs,
-                save_only=self.save_only)
-        clear_imshow('bright field')
+        if not self.test_mode:
+            quick_imshow(tbf, title='bright field', path=self.output_folder,
+                    save_fig=self.save_figs, save_only=self.save_only)
+            clear_imshow('bright field')
 
         # Add bright field to reduced data NXprocess
-        if 'data' not in nxprocess:
-            nxprocess.data = NXdata()
-        nxdata = nxprocess.data
-        nxdata['bright_field'] = tbf
+        if 'data' not in nxentry.reduced_data: 
+            nxentry.reduced_data.data = NXdata()
+        nxentry.reduced_data.data['bright_field'] = tbf
 
-    def _set_detector_bounds(self, tomo_field_indices):
+        return(nxentry)
+
+    def _set_detector_bounds(self, nxentry):
         """Set vertical detector bounds for each image stack.
         Right now the range is the same for each set in the image stack.
         """
+        if self.test_mode:
+            return(tuple(self.test_config['img_x_bounds']))
+
         # Get bright field
-        tbf = np.asarray(self.nxentry.reduced_data.data.bright_field)
+        tbf = np.asarray(nxentry.reduced_data.data.bright_field)
+        tbf_shape = tbf.shape
+
+        # Get the first tomography image and the reference heights
+        image_key = nxentry.instrument.detector.get('image_key', None)
+        if image_key and data in nxentry.instrument.detector:
+            exit('TODO')
+            field_indices = [index for index, key in enumerate(image_key) if key == 0]
+            first_image = np.asarray(nxentry.instrument.detector.data[field_indices[0],:,:])
+            theta = float(nxentry.sample.rotation_angle[field_indices[0]])
+        else:
+            tomo_field_scans = nxentry.spec_scans.tomo_fields
+            tomo_fields = TomoField.construct_from_nxcollection(tomo_field_scans)
+            vertical_shifts = tomo_fields.get_vertical_shifts()
+            if not isinstance(vertical_shifts, list):
+               vertical_shifts = [vertical_shifts]
+            prefix = str(nxentry.instrument.detector.local_name)
+            t0 = time()
+            first_image = tomo_fields.get_detector_data(prefix, tomo_fields.scan_numbers[0], 0)
+            logger.debug(f'Getting first image took {time()-t0:.2f} seconds')
+            num_tomo_stacks = len(tomo_fields.scan_numbers)
+            theta = tomo_fields.theta_range['start']
 
         # Select image bounds
-        num_tomo_stacks = len(tomo_field_indices)
-        first_image = np.asarray(self.nxentry.instrument.detector.data[tomo_field_indices[0][0]])
-        theta = float(self.nxentry.sample.rotation_angle[tomo_field_indices[0][0]])
         title = f'tomography image at theta={round(theta, 2)+0}'
-        if self.nxentry.instrument.source.attrs['station'] in ('id1a3', 'id3a'):
-            pixel_size = self.nxentry.instrument.detector.x_pixel_size
+        if nxentry.instrument.source.attrs['station'] in ('id1a3', 'id3a'):
+            pixel_size = nxentry.instrument.detector.x_pixel_size
             # Try to get a fit from the bright field
             x_sum = np.sum(tbf, 1)
             x_sum_min = x_sum.min()
@@ -605,7 +770,7 @@ class Tomo:
                 # Set a 5% margin on each side
                 margin = 0.05*(x_upp_fit-x_low_fit)
                 x_low_fit = max(0, x_low_fit-margin)
-                x_upp_fit = min(tbf.shape[0], x_upp_fit+margin)
+                x_upp_fit = min(tbf_shape[0], x_upp_fit+margin)
             if num_tomo_stacks == 1:
                 if have_fit:
                     # Set the default range to enclose the full fitted window
@@ -614,20 +779,17 @@ class Tomo:
                 else:
                     # Center a default range of 1 mm (RV: can we get this from the slits?)
                     num_x_min = int((1.0-0.5*pixel_size)/pixel_size)
-                    x_low = int(0.5*(tbf.shape[0]-num_x_min))
+                    x_low = int(0.5*(tbf_shape[0]-num_x_min))
                     x_upp = x_low+num_x_min
             else:
                 # Get the default range from the reference heights
-                z_translation = self.nxentry.sample.z_translation
-                delta_z = z_translation[tomo_field_indices[1][0]]- \
-                        z_translation[tomo_field_indices[0][0]]
+                delta_z = vertical_shifts[1]-vertical_shifts[0]
                 for i in range(2, num_tomo_stacks):
-                    delta_z = min(delta_z, z_translation[tomo_field_indices[i][0]]- \
-                        z_translation[tomo_field_indices[i-1][0]])
+                    delta_z = min(delta_z, vertical_shifts[i]-vertical_shifts[i-1])
                 logger.debug(f'delta_z = {delta_z}')
                 num_x_min = int((delta_z-0.5*pixel_size)/pixel_size)
                 logger.debug(f'num_x_min = {num_x_min}')
-                if num_x_min > tbf.shape[0]:
+                if num_x_min > tbf_shape[0]:
                     logger.warning('Image bounds and pixel size prevent seamless stacking')
                 if have_fit:
                     # Center the default range relative to the fitted window
@@ -635,7 +797,7 @@ class Tomo:
                     x_upp = x_low+num_x_min
                 else:
                     # Center the default range
-                    x_low = int(0.5*(tbf.shape[0]-num_x_min))
+                    x_low = int(0.5*(tbf_shape[0]-num_x_min))
                     x_upp = x_low+num_x_min
             tmp = np.copy(tbf)
             tmp_max = tmp.max()
@@ -682,6 +844,7 @@ class Tomo:
             x_sum_min = x_sum.min()
             x_sum_max = x_sum.max()
             print('Select vertical data reduction range from first tomography image')
+#RV            img_x_bounds = (620, 970)
             img_x_bounds = select_image_bounds(first_image, 0, title=title)
             clear_imshow(title)
             if img_x_bounds is None:
@@ -715,7 +878,7 @@ class Tomo:
 
         return(img_x_bounds)
 
-    def _set_zoom_or_skip(self, num_theta):
+    def _set_zoom_or_skip(self):
         """Set zoom and/or theta skip to reduce memory the requirement for the analysis.
         """
 #        if input_yesno('\nDo you want to zoom in to reduce memory requirement (y/n)?', 'n'):
@@ -733,57 +896,60 @@ class Tomo:
         logger.debug(f'num_theta_skip = {num_theta_skip}')
         return(zoom_perc, num_theta_skip)
 
-    def _gen_tomo(self, tomo_field_indices, nxprocess):
+    def _gen_tomo(self, nxentry):
         """Generate tomography fields.
         """
-        tbf_shape = nxprocess.data.bright_field.shape
-        img_x_bounds = tuple(nxprocess.get('img_x_bounds', (0, tbf_shape[0])))
-        img_y_bounds = tuple(nxprocess.get('img_y_bounds', (0, tbf_shape[1])))
-        zoom_perc = nxprocess.attrs.get('zoom_perc', 100)
-        #num_theta_skip = nxprocess.attrs.get('num_theta_skip', 0)
-        if nxprocess.attrs.get('num_theta_skip', None) is not None:
-            raise ValueError('num_theta_skip is not yet implemented')
+        # Get full bright field
+        tbf = np.asarray(nxentry.reduced_data.data.bright_field)
+        tbf_shape = tbf.shape
 
-        # Get dark field
-        if 'dark_field' in nxprocess.data:
-            tdf = nxprocess.data.dark_field[
-                    img_x_bounds[0]:img_x_bounds[1],img_y_bounds[0]:img_y_bounds[1]]
+        # Get image bounds
+        img_x_bounds = tuple(nxentry.reduced_data.get('img_x_bounds', (0, tbf_shape[0])))
+        img_y_bounds = tuple(nxentry.reduced_data.get('img_y_bounds', (0, tbf_shape[1])))
+
+        # Get resized dark field
+#        if 'dark_field' in data:
+#            tbf = np.asarray(nxentry.reduced_data.data.dark_field[
+#                    img_x_bounds[0]:img_x_bounds[1],img_y_bounds[0]:img_y_bounds[1]])
+#        else:
+#            logger.warning('Dark field unavailable')
+#            tdf = None
+        tdf = None
+
+        # Resize bright field
+        if img_x_bounds != (0, tbf.shape[0]) or img_y_bounds != (0, tbf.shape[1]):
+            tbf = tbf[img_x_bounds[0]:img_x_bounds[1],img_y_bounds[0]:img_y_bounds[1]]
+
+        # Get the tomography images
+        image_key = nxentry.instrument.detector.get('image_key', None)
+        if image_key and data in nxentry.instrument.detector:
+            exit('TODO')
         else:
-            logger.warning('Dark field unavailable')
-            tdf = None
-
-        # Get bright field
-        tbf = nxprocess.data.bright_field[
-                img_x_bounds[0]:img_x_bounds[1],img_y_bounds[0]:img_y_bounds[1]]
-
-        num_tomo_stacks = len(tomo_field_indices)
-        tomo_stacks = num_tomo_stacks*[np.array([])]
-        z_translations = []
-        thetas = None
-        for i, field_indices in enumerate(tomo_field_indices):
-            # Check and set the relavant stack info
-            z_translation = list(set(self.nxentry.sample.z_translation[field_indices]))
-            assert(len(z_translation) == 1)
-            z_translations += z_translation
-            sequence_numbers = self.nxentry.instrument.detector.sequence_number[field_indices]
-            assert(list(set(sequence_numbers)) == [i for i in range(len(sequence_numbers))])
-            if thetas is None:
-                thetas = np.asarray(self.nxentry.sample.rotation_angle[field_indices]) \
-                         [sequence_numbers]
-            else:
-                assert(all(thetas[i] == self.nxentry.sample.rotation_angle[field_indices[index]]
-                        for i, index in enumerate(sequence_numbers)))
-
-            # Get the tomography images
-            # Right now the range is the same for each set in the image stack.
+            tomo_field_scans = nxentry.spec_scans.tomo_fields
+            tomo_fields = TomoField.construct_from_nxcollection(tomo_field_scans)
+            horizontal_shifts = tomo_fields.get_horizontal_shifts()
+            vertical_shifts = tomo_fields.get_vertical_shifts()
+            prefix = str(nxentry.instrument.detector.local_name)
             t0 = time()
-            if list(sequence_numbers) == [i for i in range(len(sequence_numbers))]:
-                tomo_stack = np.asarray(self.nxentry.instrument.detector.data[field_indices,
-                        img_x_bounds[0]:img_x_bounds[1],img_y_bounds[0]:img_y_bounds[1]])
-            else:
-                raise ValueError('Unable to load the tomography images')
-            tomo_stack = tomo_stack.astype('float64')
+            tomo_stacks = tomo_fields.get_detector_data(prefix)
             logger.debug(f'Getting tomography images took {time()-t0:.2f} seconds')
+            logger.debug(f'Getting all images took {time()-t0:.2f} seconds')
+            thetas = np.linspace(tomo_fields.theta_range['start'], tomo_fields.theta_range['end'],
+                    tomo_fields.theta_range['num'])
+            if not isinstance(tomo_stacks, list):
+               horizontal_shifts = [horizontal_shifts]
+               vertical_shifts = [vertical_shifts]
+               tomo_stacks = [tomo_stacks]
+
+        reduced_tomo_stacks = []
+        for i, tomo_stack in enumerate(tomo_stacks):
+            # Resize the tomography images
+            # Right now the range is the same for each set in the image stack.
+            if img_x_bounds != (0, tbf.shape[0]) or img_y_bounds != (0, tbf.shape[1]):
+                t0 = time()
+                tomo_stack = tomo_stack[:,img_x_bounds[0]:img_x_bounds[1],
+                        img_y_bounds[0]:img_y_bounds[1]].astype('float64')
+                logger.debug(f'Resizing tomography images took {time()-t0:.2f} seconds')
 
             # Subtract dark field
             if tdf is not None:
@@ -816,15 +982,16 @@ class Tomo:
             # Downsize tomography stack to smaller size
             # TODO use theta_skip as well
             tomo_stack = tomo_stack.astype('float32')
-            if num_tomo_stacks ==1:
-                title = f'red fullres theta {round(thetas[0], 2)+0}'
-            else:
-                title = f'red stack {i} fullres theta {round(thetas[0], 2)+0}'
-            quick_imshow(tomo_stack[0,:,:], title=title, path=self.output_folder,
-                    save_fig=self.save_figs, save_only=self.save_only, block=self.block)
-#            if not self.block:
-#                clear_imshow(title)
-            if zoom_perc != 100:
+            if not self.test_mode:
+                if len(tomo_stacks) == 1:
+                    title = f'red fullres theta {round(thetas[0], 2)+0}'
+                else:
+                    title = f'red stack {i} fullres theta {round(thetas[0], 2)+0}'
+                quick_imshow(tomo_stack[0,:,:], title=title, path=self.output_folder,
+                        save_fig=self.save_figs, save_only=self.save_only, block=self.block)
+#                if not self.block:
+#                    clear_imshow(title)
+            if False and zoom_perc != 100:
                 t0 = time()
                 logger.debug(f'Zooming in ...')
                 tomo_zoom_list = []
@@ -835,39 +1002,38 @@ class Tomo:
                 logger.debug(f'... done in {time()-t0:.2f} seconds')
                 logger.info(f'Zooming in took {time()-t0:.2f} seconds')
                 del tomo_zoom_list
-                title = f'red stack {zoom_perc}p theta {round(thetas[0], 2)+0}'
-                quick_imshow(tomo_stack[0,:,:], title=title, path=self.output_folder,
-                        save_fig=self.save_figs, save_only=self.save_only, block=self.block)
-#                if not self.block:
-#                    clear_imshow(title)
+                if not self.test_mode:
+                    title = f'red stack {zoom_perc}p theta {round(thetas[0], 2)+0}'
+                    quick_imshow(tomo_stack[0,:,:], title=title, path=self.output_folder,
+                            save_fig=self.save_figs, save_only=self.save_only, block=self.block)
+#                    if not self.block:
+#                        clear_imshow(title)
 
             # Convert tomography stack from theta,row,column to row,theta,column
             t0 = time()
             tomo_stack = np.swapaxes(tomo_stack, 0, 1)
             logger.debug(f'Converting coordinate order took {time()-t0:.2f} seconds')
 
-            # Combine stacks
-            tomo_stacks[i] = tomo_stack
+            # Save test data to file
+            if self.test_mode:
+                row_index = int(tomo_stack.shape[0]/2)
+                np.savetxt(f'{self.output_folder}/red_stack_{i+1}.txt', tomo_stack[row_index,:,:],
+                        fmt='%.6e')
+
+            # Combine resized stacks
+            reduced_tomo_stacks.append(tomo_stack)
+
+        # Add tomo field info to reduced data NXprocess
+        nxentry.reduced_data['x_translation'] = np.asarray(horizontal_shifts)
+        nxentry.reduced_data['z_translation'] = np.asarray(vertical_shifts)
+        nxentry.reduced_data['rotation_angle'] = thetas
+        nxentry.reduced_data.data['tomo_fields'] = np.asarray(reduced_tomo_stacks)
 
         if tdf is not None:
             del tdf
         del tbf
 
-        # Add tomo fields to reduced data NXprocess
-        t0 = time()
-        logger.info(f'Updating the Nexus file ...')
-        nxdata = nxprocess.data
-        nxdata['tomo_fields'] = tomo_stacks
-        nxdata.attrs['signal'] = 'tomo_fields'
-        nxprocess.attrs['default'] = 'data'
-        nxprocess.z_translation = z_translations
-        nxprocess.z_translation.units = self.nxentry.sample.z_translation.units
-        nxprocess.rotation_angle = thetas
-        nxprocess.rotation_angle.units = self.nxentry.sample.rotation_angle.units
-        self.nxentry.data.makelink(nxprocess.data.tomo_fields, name='reduced_data')
-        self.nxentry.data.attrs['signal'] = 'reduced_data'
-        logger.debug(f'... done in {time()-t0:.2f} seconds')
-        logger.info(f'Updating the Nexus file took {time()-t0:.2f} seconds')
+        return(nxentry)
 
     def _find_center_one_plane(self, sinogram, row, thetas, eff_pixel_size, cross_sectional_dim,
             tol=0.1, num_core=1):
@@ -890,7 +1056,7 @@ class Tomo:
         logger.debug(f'... done in {time()-t0:.2f} seconds')
         logger.info(f'Finding the center using Nghia Vo’s method took {time()-t0:.2f} seconds')
         center_offset_vo = tomo_center-center
-        logging.info(f'Center at row {row} using Nghia Vo’s method = {center_offset_vo:.2f}')
+        logger.info(f'Center at row {row} using Nghia Vo’s method = {center_offset_vo:.2f}')
         t0 = time()
         logger.debug(f'Running _reconstruct_one_plane on {self.num_core} cores ...')
         recon_plane = self._reconstruct_one_plane(sinogram_T, tomo_center, thetas,
@@ -1139,44 +1305,159 @@ class Tomo:
 
         return tomo_recon_stack
 
+    def _resize_reconstructed_data(self, data, z_only=False):
+        """Resize the reconstructed tomography data.
+        """
+        # Data order: row(z),x,y or stack,row(z),x,y
+        if isinstance(data, list):
+            for stack in data:
+                assert(stack.ndim == 3)
+            num_tomo_stacks = len(data)
+            tomo_recon_stacks = data
+        else:
+            assert(data.ndim == 3)
+            num_tomo_stacks = 1
+            tomo_recon_stacks = [data]
 
-def run_tomo(filename:str, modes:list[str], force_overwrite=False,
-        num_core=-1, output_folder='.', save_figs='no') -> None:
-    logging.info(f'filename = {filename}')
-    logging.debug(f'modes= {modes}')
-    logging.info(f'force_overwrite = {force_overwrite}')
-    logging.debug(f'num_core= {num_core}')
-    logging.info(f'output_folder = {output_folder}')
-    logging.info(f'save_figs = {save_figs}')
+        if z_only:
+            x_bounds = None
+            y_bounds = None
+        else:
+            # Selecting x bounds (in yz-plane)
+            tomosum = 0
+            [tomosum := tomosum+np.sum(tomo_recon_stacks[i], axis=(0,2))
+                    for i in range(num_tomo_stacks)]
+            select_x_bounds = input_yesno('\nDo you want to change the image x-bounds (y/n)?', 'y')
+            if not select_x_bounds:
+                x_bounds = None
+            else:
+                accept = False
+                index_ranges = None
+                while not accept:
+                    mask, x_bounds = draw_mask_1d(tomosum, current_index_ranges=index_ranges,
+                            title='select x data range', legend='recon stack sum yz')
+                    while len(x_bounds) != 1:
+                        print('Please select exactly one continuous range')
+                        mask, x_bounds = draw_mask_1d(tomosum, title='select x data range',
+                                legend='recon stack sum yz')
+                    x_bounds = x_bounds[0]
+#                    quick_plot(tomosum, vlines=x_bounds, title='recon stack sum yz')
+#                    print(f'x_bounds = {x_bounds} (lower bound inclusive, upper bound '+
+#                            'exclusive)')
+#                    accept = input_yesno('Accept these bounds (y/n)?', 'y')
+                    accept = True
+            logger.debug(f'x_bounds = {x_bounds}')
+
+            # Selecting y bounds (in xz-plane)
+            tomosum = 0
+            [tomosum := tomosum+np.sum(tomo_recon_stacks[i], axis=(0,1))
+                    for i in range(num_tomo_stacks)]
+            select_y_bounds = input_yesno('\nDo you want to change the image y-bounds (y/n)?', 'y')
+            if not select_y_bounds:
+                y_bounds = None
+            else:
+                accept = False
+                index_ranges = None
+                while not accept:
+                    mask, y_bounds = draw_mask_1d(tomosum, current_index_ranges=index_ranges,
+                            title='select x data range', legend='recon stack sum xz')
+                    while len(y_bounds) != 1:
+                        print('Please select exactly one continuous range')
+                        mask, y_bounds = draw_mask_1d(tomosum, title='select x data range',
+                                legend='recon stack sum xz')
+                    y_bounds = y_bounds[0]
+#                    quick_plot(tomosum, vlines=y_bounds, title='recon stack sum xz')
+#                    print(f'y_bounds = {y_bounds} (lower bound inclusive, upper bound '+
+#                            'exclusive)')
+#                    accept = input_yesno('Accept these bounds (y/n)?', 'y')
+                    accept = True
+            logger.debug(f'y_bounds = {y_bounds}')
+
+        # Selecting z bounds (in xy-plane) (only valid for a single image set)
+        if num_tomo_stacks != 1:
+            z_bounds = None
+        else:
+            tomosum = 0
+            [tomosum := tomosum+np.sum(tomo_recon_stacks[i], axis=(1,2))
+                    for i in range(num_tomo_stacks)]
+            select_z_bounds = input_yesno('Do you want to change the image z-bounds (y/n)?', 'n')
+            if not select_z_bounds:
+                z_bounds = None
+            else:
+                accept = False
+                index_ranges = None
+                while not accept:
+                    mask, z_bounds = draw_mask_1d(tomosum, current_index_ranges=index_ranges,
+                            title='select x data range', legend='recon stack sum xy')
+                    while len(z_bounds) != 1:
+                        print('Please select exactly one continuous range')
+                        mask, z_bounds = draw_mask_1d(tomosum, title='select x data range',
+                                legend='recon stack sum xy')
+                    z_bounds = z_bounds[0]
+#                    quick_plot(tomosum, vlines=z_bounds, title='recon stack sum xy')
+#                    print(f'z_bounds = {z_bounds} (lower bound inclusive, upper bound '+
+#                            'exclusive)')
+#                    accept = input_yesno('Accept these bounds (y/n)?', 'y')
+                    accept = True
+            logger.debug(f'z_bounds = {z_bounds}')
+
+        return(x_bounds, y_bounds, z_bounds)
+
+
+def run_tomo(input_file:str, output_file:str, modes:list[str], center_file=None, num_core=-1,
+        output_folder='.', save_figs='no', test_mode=False) -> None:
+
+    if test_mode:
+        logging_format = '%(asctime)s : %(levelname)s - %(module)s : %(funcName)s - %(message)s'
+        level = logging.getLevelName('INFO')
+        logging.basicConfig(filename=f'{output_folder}/tomo.log', filemode='w',
+                format=logging_format, level=level, force=True)
+    logger.info(f'input_file = {input_file}')
+    logger.info(f'center_file = {center_file}')
+    logger.info(f'output_file = {output_file}')
+    logger.debug(f'modes= {modes}')
+    logger.debug(f'num_core= {num_core}')
+    logger.info(f'output_folder = {output_folder}')
+    logger.info(f'save_figs = {save_figs}')
+    logger.info(f'test_mode = {test_mode}')
 
     # Check for correction modes
     if modes is None:
         modes = ['all']
     logger.debug(f'modes {type(modes)} = {modes}')
 
-    wf = TomoWorkflow.construct_from_nexus(filename)
-    nxroot = nxload(filename, 'rw')
-    nxroot.close()
+    # Instantiate Tomo object
+    tomo = Tomo(num_core=num_core, output_folder=output_folder, save_figs=save_figs,
+            test_mode=test_mode)
 
-    for sample_map in wf.sample_maps:
-        nxentry = nxroot[sample_map.title]
+    # Read input file
+    data = tomo.read(input_file)
 
-        # Instantiate Tomo object
-        tomo = Tomo(nxentry, force_overwrite=force_overwrite, num_core=num_core,
-                output_folder=output_folder, save_figs=save_figs)
+    # Generate reduced tomography images
+    if 'reduce_data' in modes or 'all' in modes:
+        data = tomo.gen_reduced_data(data)
 
-        # Generate reduced tomography images
-        if 'reduce_data' in modes or 'all' in modes:
-            tomo.gen_reduced_data()
+    # Find rotation axis centers for the tomography stacks.
+    center_data = None
+    if 'find_center' in modes or 'all' in modes:
+        center_data = tomo.find_centers(data)
 
-        # Find rotation axis centers for the tomography stacks.
-        if 'find_center' in modes or 'all' in modes:
-            tomo.find_centers()
+    # Reconstruct tomography stacks
+    if 'reconstruct_data' in modes or 'all' in modes:
+        if center_data is None:
+            # Read input file
+            center_data = tomo.read(center_file)
+        data = tomo.reconstruct_data(data, center_data)
+        center_data = None
 
-        # Reconstruct tomography stacks
-        if 'reconstruct_image' in modes or 'all' in modes:
-            tomo.reconstruct_tomo_stacks()
+    # Combine reconstructed tomography stacks
+    if 'combine_data' in modes or 'all' in modes:
+        data = tomo.combine_data(data)
 
-        # Combine reconstructed tomography stacks
-        if 'combine_images' in modes or 'all' in modes:
-            tomo.combine_tomo_stacks()
+    # Write output file
+    if not test_mode:
+        if center_data is None:
+            data = tomo.write(data, output_file)
+        else:
+            data = tomo.write(center_data, output_file)
+

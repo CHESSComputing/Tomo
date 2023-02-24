@@ -155,23 +155,31 @@ link_parser.add_argument('-a', '--api_key',
 # RUN THE RECONSTRUCTION
 def run_tomo(args:list) -> None:
     from .run_tomo import run_tomo
-    run_tomo(args.input_file, args.modes, force_overwrite=args.force_overwrite,
-        num_core=args.num_core, output_folder=args.output_folder, save_figs=args.save_figs)
+    run_tomo(args.input_file, args.output_file, args.modes, center_file=args.center_file,
+            num_core=args.num_core, output_folder=args.output_folder, save_figs=args.save_figs)
 
 tomo_parser = subparsers.add_parser('run_tomo', help='''Construct and add reconstructed tomography
         data to an existing Tomo workflow representations in a NeXus file.''')
 tomo_parser.set_defaults(func=run_tomo)
-tomo_parser.add_argument('input_file',
+tomo_parser.add_argument('-i', '--input_file',
+        required=True,
         type=pathlib.Path,
         help='''Full or relative input file path containing raw and/or reduced data.''')
-tomo_parser.add_argument('-f', '--force_overwrite',
-        action='store_true',
-        help='''Use this flag to overwrite any existing reduced data.''')
+tomo_parser.add_argument('-o', '--output_file',
+        required=True,
+        type=pathlib.Path,
+        help='''Full or relative input file path containing raw and/or reduced data.''')
+tomo_parser.add_argument('-c', '--center_file',
+        type=pathlib.Path,
+        help='''Full or relative input file path containing the rotation axis centers info.''')
+#tomo_parser.add_argument('-f', '--force_overwrite',
+#        action='store_true',
+#        help='''Use this flag to overwrite any existing reduced data.''')
 tomo_parser.add_argument('-n', '--num_core',
         type=int,
         default=-1,
         help='''Specify the number of processors to use.''')
-tomo_parser.add_argument('-o', '--output_folder',
+tomo_parser.add_argument('--output_folder',
         type=pathlib.Path,
         default='.',
         help='Full or relative path to an output folder')
@@ -189,16 +197,16 @@ tomo_parser.add_argument('--find_center',
         const='find_center',
         action='append_const',
         help='''Use this flag to find and add the calibrated center axis info to the input file.''')
-tomo_parser.add_argument('--reconstruct_image',
+tomo_parser.add_argument('--reconstruct_data',
         dest='modes',
-        const='reconstruct_image',
+        const='reconstruct_data',
         action='append_const',
-        help='''Use this flag to create and add reconstructed image data to the input file.''')
-tomo_parser.add_argument('--combine_images',
+        help='''Use this flag to create and add reconstructed data data to the input file.''')
+tomo_parser.add_argument('--combine_datas',
         dest='modes',
-        const='combine_images',
+        const='combine_datas',
         action='append_const',
-        help='''Use this flag to combine reconstructed image data and add to the input file.''')
+        help='''Use this flag to combine reconstructed data data and add to the input file.''')
 
 
 if __name__ == '__main__':
