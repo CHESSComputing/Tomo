@@ -1002,17 +1002,13 @@ class MapConfig(BaseModel):
             nxspec_scans[field_name] = field.construct_nxcollection(image_key, thetas,
                     self.detector)
             if include_raw_data:
+                image_stacks.append(field.get_detector_data(self.detector.prefix))
                 for scan_number in field.scan_numbers:
                     parser = field.get_scanparser(scan_number)
                     scan_info = field.stack_info[field.get_scan_index(scan_number)]
-                    image_offset = scan_info['starting_image_offset']
                     num_image = scan_info['num_image']
                     image_keys += num_image*[image_key]
                     sequence_numbers += [i for i in range(num_image)]
-                    exit('CHECK')
-                    for scan_step_index in range(image_offset, image_offset+num_image):
-                        image_stacks.append(field.get_detector_data(self.detector.prefix,
-                                scan_number, scan_step_index))
                     if thetas is None:
                         rotation_angles += scan_info['num_image']*[0.0]
                     else:
@@ -1025,7 +1021,7 @@ class MapConfig(BaseModel):
             # Add image data to NXdetector
             nxinstrument.detector.image_key = image_keys
             nxinstrument.detector.sequence_number = sequence_numbers
-            nxinstrument.detector.data = np.stack([image for image in image_stacks])
+            nxinstrument.detector.data = np.concatenate([image for image in image_stacks])
 
             # Add image data to NXsample
             nxsample.rotation_angle = rotation_angles

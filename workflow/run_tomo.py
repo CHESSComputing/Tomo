@@ -187,50 +187,61 @@ class Tomo:
             # Get test mode configuration info
             if self.test_mode:
                 self.test_config = data['sample_maps'][0]['test_mode']
+        elif isinstance(data, NXroot):
+            nxentry = data[data.attrs['default']]
         else:
             raise ValueError(f'Invalid parameter data ({data})')
 
         # Create an NXprocess to store data reduction (meta)data
-        if 'reduced_data' in nxentry:
-            logger.warning(f'Existing reduced data in {nxentry} will be overwritten.')
-            del nxentry['reduced_data']
-        if 'data' in nxentry and 'reduced_data' in nxentry.data:
-            del nxentry.data['reduced_data']
-        nxentry.reduced_data = NXprocess()
+        reduced_data = NXprocess()
 
         # Generate dark field
         if 'dark_field' in nxentry['spec_scans']:
-            nxentry = self._gen_dark(nxentry)
+            reduced_data = self._gen_dark(nxentry, reduced_data)
 
         # Generate bright field
-        nxentry = self._gen_bright(nxentry)
+        reduced_data = self._gen_bright(nxentry, reduced_data)
 
         # Set vertical detector bounds for image stack
-        img_x_bounds = self._set_detector_bounds(nxentry)
+        img_x_bounds = self._set_detector_bounds(nxentry, reduced_data)
         logger.info(f'img_x_bounds = {img_x_bounds}')
-        nxentry.reduced_data['img_x_bounds'] = img_x_bounds
+        reduced_data['img_x_bounds'] = img_x_bounds
 
         # Set zoom and/or theta skip to reduce memory the requirement
         zoom_perc, num_theta_skip = self._set_zoom_or_skip()
         if zoom_perc is not None:
-            nxentry.reduced_data.attrs['zoom_perc'] = zoom_perc
+            reduced_data.attrs['zoom_perc'] = zoom_perc
         if num_theta_skip is not None:
-            nxentry.reduced_data.attrs['num_theta_skip'] = num_theta_skip
+            reduced_data.attrs['num_theta_skip'] = num_theta_skip
 
         # Generate reduced tomography fields
-        nxentry = self._gen_tomo(nxentry)
+        reduced_data = self._gen_tomo(nxentry, reduced_data)
 
-        # RV TODO FIX Remove raw data from Nexus file if exists
+        # Create a copy of the input Nexus object and remove raw and any existing reduced data
+        if isinstance(data, NXroot):
+            exclude_items = [f'{nxentry._name}/reduced_data/data',
+                    f'{nxentry._name}/instrument/detector/data',
+                    f'{nxentry._name}/instrument/detector/image_key',
+                    f'{nxentry._name}/instrument/detector/sequence_number',
+                    f'{nxentry._name}/sample/rotation_angle',
+                    f'{nxentry._name}/sample/x_translation',
+                    f'{nxentry._name}/sample/z_translation',
+                    f'{nxentry._name}/data/data',
+                    f'{nxentry._name}/data/image_key',
+                    f'{nxentry._name}/data/rotation_angle',
+                    f'{nxentry._name}/data/x_translation',
+                    f'{nxentry._name}/data/z_translation']
+            nxroot = nxcopy(data, exclude_nxpaths=exclude_items)
+            nxentry = nxroot[nxroot.attrs['default']]
 
-        # Add NXdata object
-        if 'data' not in nxentry:
-            nxentry.data = NXdata()
+        # Add the reduced data NXprocess
+        nxentry.reduced_data = reduced_data
+
         nxentry.attrs['default'] = 'data'
         nxentry.data.makelink(nxentry.reduced_data.data.tomo_fields, name='reduced_data')
-        if 'rotation_angle' not in nxentry.data:
-            nxentry.data.makelink(nxentry.reduced_data.rotation_angle, name='rotation_angle')
+        nxentry.data.makelink(nxentry.reduced_data.rotation_angle, name='rotation_angle')
         nxentry.data.attrs['signal'] = 'reduced_data'
-
+ 
         return(nxroot)
 
     def find_centers(self, nxroot):
@@ -462,7 +473,7 @@ class Tomo:
                 x_range[0]:x_range[1],y_range[0]:y_range[1]] for stack in tomo_recon_stacks])
         nxprocess.data.attrs['signal'] = 'reconstructed_data'
 
-        # Create a copy of the input Nexus object and remove reduced data if requested
+        # Create a copy of the input Nexus object and remove reduced data
         exclude_items = [f'{nxentry._name}/reduced_data/data', f'{nxentry._name}/data/reduced_data']
         nxroot_copy = nxcopy(nxroot, exclude_nxpaths=exclude_items)
 
@@ -578,7 +589,7 @@ class Tomo:
         nxprocess.data['combined_data'] = tomo_recon_combined
         nxprocess.data.attrs['signal'] = 'combined_data'
 
-        # Create a copy of the input Nexus object and remove reconstructed data if requested
+        # Create a copy of the input Nexus object and remove reconstructed data
         exclude_items = [f'{nxentry._name}/reconstructed_data/data',
                 f'{nxentry._name}/data/reconstructed_data']
         nxroot_copy = nxcopy(nxroot, exclude_nxpaths=exclude_items)
@@ -599,10 +610,10 @@ class Tomo:
         """
         # Get the dark field images
         image_key = nxentry.instrument.detector.get('image_key', None)
-        if image_key and data in nxentry.instrument.detector:
-            exit('TODO')
+        if image_key and 'data' in nxentry.instrument.detector:
             field_indices = [index for index, key in enumerate(image_key) if key == 2]
             tdf_stack = nxentry.instrument.detector.data[field_indices,:,:]
+            # RV the default NXtomo form does not accomodate bright or dark field stacks
         else:
             dark_field_scans = nxentry.spec_scans.dark_field
             dark_field = FlatField.construct_from_nxcollection(dark_field_scans)
@@ -647,20 +658,20 @@ class Tomo:
             clear_imshow('dark field')
 
         # Add dark field to reduced data NXprocess
-        nxentry.reduced_data.data = NXdata()
-        nxentry.reduced_data.data['dark_field'] = tdf
+        reduced_data.data = NXdata()
+        reduced_data.data['dark_field'] = tdf
 
-        return(nxentry)
+        return(reduced_data)
 
-    def _gen_bright(self, nxentry):
+    def _gen_bright(self, nxentry, reduced_data):
         """Generate bright field.
         """
         # Get the bright field images
         image_key = nxentry.instrument.detector.get('image_key', None)
-        if image_key and data in nxentry.instrument.detector:
-            exit('TODO')
+        if image_key and 'data' in nxentry.instrument.detector:
             field_indices = [index for index, key in enumerate(image_key) if key == 1]
             tbf_stack = nxentry.instrument.detector.data[field_indices,:,:]
+            # RV the default NXtomo form does not accomodate bright or dark field stacks
         else:
             bright_field_scans = nxentry.spec_scans.bright_field
             bright_field = FlatField.construct_from_nxcollection(bright_field_scans)
@@ -688,8 +699,8 @@ class Tomo:
            raise ValueError(f'Invalid tbf_stack shape ({tbf_stacks.shape})')
 
         # Subtract dark field
-        if 'data' in nxentry.reduced_data and 'dark_field' in nxentry.reduced_data.data:
-            tbf -= nxentry.reduced_data.data.dark_field
+        if 'data' in reduced_data and 'dark_field' in reduced_data.data:
+            tbf -= reduced_data.data.dark_field
         else:
             logger.warning('Dark field unavailable')
 
@@ -710,13 +721,13 @@ class Tomo:
             clear_imshow('bright field')
 
         # Add bright field to reduced data NXprocess
-        if 'data' not in nxentry.reduced_data: 
-            nxentry.reduced_data.data = NXdata()
-        nxentry.reduced_data.data['bright_field'] = tbf
+        if 'data' not in reduced_data: 
+            reduced_data.data = NXdata()
+        reduced_data.data['bright_field'] = tbf
 
-        return(nxentry)
+        return(reduced_data)
 
-    def _set_detector_bounds(self, nxentry):
+    def _set_detector_bounds(self, nxentry, reduced_data):
         """Set vertical detector bounds for each image stack.
         Right now the range is the same for each set in the image stack.
         """
@@ -724,16 +735,18 @@ class Tomo:
             return(tuple(self.test_config['img_x_bounds']))
 
         # Get bright field
-        tbf = np.asarray(nxentry.reduced_data.data.bright_field)
+        tbf = np.asarray(reduced_data.data.bright_field)
         tbf_shape = tbf.shape
 
         # Get the first tomography image and the reference heights
         image_key = nxentry.instrument.detector.get('image_key', None)
-        if image_key and data in nxentry.instrument.detector:
-            exit('TODO')
+        if image_key and 'data' in nxentry.instrument.detector:
             field_indices = [index for index, key in enumerate(image_key) if key == 0]
             first_image = np.asarray(nxentry.instrument.detector.data[field_indices[0],:,:])
             theta = float(nxentry.sample.rotation_angle[field_indices[0]])
+            z_translation_all = nxentry.sample.z_translation[field_indices]
+            z_translation_levels = sorted(list(set(z_translation_all)))
+            num_tomo_stacks = len(z_translation_levels)
         else:
             tomo_field_scans = nxentry.spec_scans.tomo_fields
             tomo_fields = TomoField.construct_from_nxcollection(tomo_field_scans)
@@ -844,7 +857,6 @@ class Tomo:
             x_sum_min = x_sum.min()
             x_sum_max = x_sum.max()
             print('Select vertical data reduction range from first tomography image')
-#RV            img_x_bounds = (620, 970)
             img_x_bounds = select_image_bounds(first_image, 0, title=title)
             clear_imshow(title)
             if img_x_bounds is None:
@@ -894,22 +906,23 @@ class Tomo:
         num_theta_skip = None
         logger.debug(f'zoom_perc = {zoom_perc}')
         logger.debug(f'num_theta_skip = {num_theta_skip}')
+
         return(zoom_perc, num_theta_skip)
 
-    def _gen_tomo(self, nxentry):
+    def _gen_tomo(self, nxentry, reduced_data):
         """Generate tomography fields.
         """
         # Get full bright field
-        tbf = np.asarray(nxentry.reduced_data.data.bright_field)
+        tbf = np.asarray(reduced_data.data.bright_field)
         tbf_shape = tbf.shape
 
         # Get image bounds
-        img_x_bounds = tuple(nxentry.reduced_data.get('img_x_bounds', (0, tbf_shape[0])))
-        img_y_bounds = tuple(nxentry.reduced_data.get('img_y_bounds', (0, tbf_shape[1])))
+        img_x_bounds = tuple(reduced_data.get('img_x_bounds', (0, tbf_shape[0])))
+        img_y_bounds = tuple(reduced_data.get('img_y_bounds', (0, tbf_shape[1])))
 
         # Get resized dark field
 #        if 'dark_field' in data:
-#            tbf = np.asarray(nxentry.reduced_data.data.dark_field[
+#            tbf = np.asarray(reduced_data.data.dark_field[
 #                    img_x_bounds[0]:img_x_bounds[1],img_y_bounds[0]:img_y_bounds[1]])
 #        else:
 #            logger.warning('Dark field unavailable')
@@ -922,8 +935,38 @@ class Tomo:
 
         # Get the tomography images
         image_key = nxentry.instrument.detector.get('image_key', None)
-        if image_key and data in nxentry.instrument.detector:
-            exit('TODO')
+        if image_key and 'data' in nxentry.instrument.detector:
+            field_indices_all = [index for index, key in enumerate(image_key) if key == 0]
+            z_translation_all = nxentry.sample.z_translation[field_indices_all]
+            z_translation_levels = sorted(list(set(z_translation_all)))
+            num_tomo_stacks = len(z_translation_levels)
+            tomo_stacks = num_tomo_stacks*[np.array([])]
+            horizontal_shifts = []
+            vertical_shifts = []
+            thetas = None
+            tomo_stacks = []
+            for i, z_translation in enumerate(z_translation_levels):
+                field_indices = [field_indices_all[index]
+                        for index, z in enumerate(z_translation_all) if z == z_translation]
+                horizontal_shift = list(set(nxentry.sample.x_translation[field_indices]))
+                assert(len(horizontal_shift) == 1)
+                horizontal_shifts += horizontal_shift
+                vertical_shift = list(set(nxentry.sample.z_translation[field_indices]))
+                assert(len(vertical_shift) == 1)
+                vertical_shifts += vertical_shift
+                sequence_numbers = nxentry.instrument.detector.sequence_number[field_indices]
+                if thetas is None:
+                    thetas = np.asarray(nxentry.sample.rotation_angle[field_indices]) \
+                             [sequence_numbers]
+                else:
+                    assert(all(thetas[i] == nxentry.sample.rotation_angle[field_indices[index]]
+                            for i, index in enumerate(sequence_numbers)))
+                assert(list(set(sequence_numbers)) == [i for i in range(len(sequence_numbers))])
+                if list(sequence_numbers) == [i for i in range(len(sequence_numbers))]:
+                    tomo_stack = np.asarray(nxentry.instrument.detector.data[field_indices])
+                else:
+                    raise ValueError('Unable to load the tomography images')
+                tomo_stacks.append(tomo_stack)
         else:
             tomo_field_scans = nxentry.spec_scans.tomo_fields
             tomo_fields = TomoField.construct_from_nxcollection(tomo_field_scans)
@@ -937,9 +980,9 @@ class Tomo:
             thetas = np.linspace(tomo_fields.theta_range['start'], tomo_fields.theta_range['end'],
                     tomo_fields.theta_range['num'])
             if not isinstance(tomo_stacks, list):
-               horizontal_shifts = [horizontal_shifts]
-               vertical_shifts = [vertical_shifts]
-               tomo_stacks = [tomo_stacks]
+                horizontal_shifts = [horizontal_shifts]
+                vertical_shifts = [vertical_shifts]
+                tomo_stacks = [tomo_stacks]
 
         reduced_tomo_stacks = []
         for i, tomo_stack in enumerate(tomo_stacks):
@@ -1024,16 +1067,16 @@ class Tomo:
             reduced_tomo_stacks.append(tomo_stack)
 
         # Add tomo field info to reduced data NXprocess
-        nxentry.reduced_data['x_translation'] = np.asarray(horizontal_shifts)
-        nxentry.reduced_data['z_translation'] = np.asarray(vertical_shifts)
-        nxentry.reduced_data['rotation_angle'] = thetas
-        nxentry.reduced_data.data['tomo_fields'] = np.asarray(reduced_tomo_stacks)
+        reduced_data['rotation_angle'] = thetas
+        reduced_data['x_translation'] = np.asarray(horizontal_shifts)
+        reduced_data['z_translation'] = np.asarray(vertical_shifts)
+        reduced_data.data['tomo_fields'] = np.asarray(reduced_tomo_stacks)
 
         if tdf is not None:
             del tdf
         del tbf
 
-        return(nxentry)
+        return(reduced_data)
 
     def _find_center_one_plane(self, sinogram, row, thetas, eff_pixel_size, cross_sectional_dim,
             tol=0.1, num_core=1):
