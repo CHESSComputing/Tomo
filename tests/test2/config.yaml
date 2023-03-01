@@ -52,7 +52,6 @@ sample_maps:
     img_x_bounds:
     - 582
     - 1509
-    center_stack_index: 2
     lower_row: 100
 #    lower_center_offset: 56.0
     upper_row: 826

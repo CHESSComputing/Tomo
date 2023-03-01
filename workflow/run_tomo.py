@@ -17,7 +17,8 @@ except:
 
 from multiprocessing import cpu_count
 from nexusformat.nexus import *
-from os import mkdir, path
+from os import mkdir
+from os import path as os_path
 try:
     from skimage.transform import iradon
 except:
@@ -34,9 +35,9 @@ except:
 from yaml import safe_load, safe_dump
 
 from msnctools.fit import Fit
-from msnctools.general import illegal_value, is_int, is_num, is_index_range, input_int, input_num, \
-        input_yesno, input_menu, draw_mask_1d, select_image_bounds, select_one_image_bound, \
-        clear_imshow, quick_imshow, clear_plot, quick_plot
+from msnctools.general import illegal_value, is_int, is_int_pair, is_num, is_index_range, \
+        input_int, input_num, input_yesno, input_menu, draw_mask_1d, select_image_bounds, \
+        select_one_image_bound, clear_imshow, quick_imshow, clear_plot, quick_plot
 
 from workflow.models import import_scanparser, FlatField, TomoField, TomoWorkflow
 from workflow.__version__ import __version__
@@ -67,14 +68,14 @@ def nxcopy(nxobject:NXobject, exclude_nxpaths:list[str]=[], nxpath_prefix:str=''
             nxobject_copy.attrs[k] = v
 
     for k, v in nxobject.items():
-        nxpath = path.join(nxpath_prefix, k)
+        nxpath = os_path.join(nxpath_prefix, k)
 
         if nxpath in exclude_nxpaths:
             continue
 
         if isinstance(v, NXgroup):
             nxobject_copy[k] = nxcopy(v, exclude_nxpaths=exclude_nxpaths,
-                    nxpath_prefix=path.join(nxpath_prefix, k))
+                    nxpath_prefix=os_path.join(nxpath_prefix, k))
         else:
             nxobject_copy[k] = v
 
@@ -97,16 +98,33 @@ class set_numexpr_threads:
 class Tomo:
     """Processing tomography data with misalignment.
     """
-    def __init__(self, num_core=-1, output_folder='.', save_figs='no', test_mode=False):
+    def __init__(self, galaxy_flag=False, num_core=-1, output_folder='.', save_figs=None,
+            test_mode=False):
         """Initialize with optional config input file or dictionary
         """
+        if not isinstance(galaxy_flag, bool):
+            raise ValueError(f'Invalid parameter galaxy_flag ({galaxy_flag})')
+        self.galaxy_flag = galaxy_flag
         self.num_core = num_core
-        self.output_folder = path.abspath(output_folder)
-        if not path.isdir(output_folder):
-            mkdir(path.abspath(output_folder))
-        if not isinstance(test_mode, bool):
-            raise ValueError(f'Invalid parameter test_mode ({test_mode})')
-        self.test_mode = test_mode
+        if self.galaxy_flag:
+            if output_folder != '.':
+                logger.warning('Ignoring output_folder in galaxy mode')
+            self.output_folder = '.'
+            if test_mode != False:
+                logger.warning('Ignoring test_mode in galaxy mode')
+            self.test_mode = False
+            if save_figs is not None:
+                logger.warning('Ignoring save_figs in galaxy mode')
+            save_figs = 'only'
+        else:
+            self.output_folder = os_path.abspath(output_folder)
+            if not os_path.isdir(output_folder):
+                mkdir(os_path.abspath(output_folder))
+            if not isinstance(test_mode, bool):
+                raise ValueError(f'Invalid parameter test_mode ({test_mode})')
+            self.test_mode = test_mode
+            if save_figs is None:
+                save_figs = 'no'
         self.test_config = {}
         if self.test_mode:
             if save_figs != 'only':
@@ -137,7 +155,7 @@ class Tomo:
             self.num_core= cpu_count()
 
     def read(self, filename):
-        extension = path.splitext(filename)[1]
+        extension = os_path.splitext(filename)[1]
         if extension == '.yml' or extension == '.yaml':
             with open(filename, 'r') as f:
                 config = safe_load(f)
@@ -154,21 +172,25 @@ class Tomo:
             raise ValueError(f'Invalid filename extension ({extension})')
 
     def write(self, data, filename):
-        extension = path.splitext(filename)[1]
+        extension = os_path.splitext(filename)[1]
         if extension == '.yml' or extension == '.yaml':
             with open(filename, 'w') as f:
                 safe_dump(data, f)
         elif extension == '.nxs':
             data.save(filename, mode='w')
         elif extension == '.nc':
-            data.to_netcdf(path=filename)
+            data.to_netcdf(os_path=filename)
         else:
             raise ValueError(f'Invalid filename extension ({extension})')
 
-    def gen_reduced_data(self, data):
+    def gen_reduced_data(self, data, img_x_bounds=None):
         """Generate the reduced tomography images.
         """
         logger.info('Generate the reduced tomography images')
+
+        # Create plot galaxy path directory if needed
+        if self.galaxy_flag and not os_path.exists('tomo_reduce_plots'):
+            mkdir('tomo_reduce_plots')
 
         if isinstance(data, dict):
             # Create Nexus format object from input dictionary
@@ -203,7 +225,7 @@ class Tomo:
         reduced_data = self._gen_bright(nxentry, reduced_data)
 
         # Set vertical detector bounds for image stack
-        img_x_bounds = self._set_detector_bounds(nxentry, reduced_data)
+        img_x_bounds = self._set_detector_bounds(nxentry, reduced_data, img_x_bounds=img_x_bounds)
         logger.info(f'img_x_bounds = {img_x_bounds}')
         reduced_data['img_x_bounds'] = img_x_bounds
 
@@ -237,6 +259,8 @@ class Tomo:
         # Add the reduced data NXprocess
         nxentry.reduced_data = reduced_data
 
+        if 'data' not in nxentry:
+            nxentry.data = NXdata()
         nxentry.attrs['default'] = 'data'
         nxentry.data.makelink(nxentry.reduced_data.data.tomo_fields, name='reduced_data')
         nxentry.data.makelink(nxentry.reduced_data.rotation_angle, name='rotation_angle')
@@ -244,7 +268,7 @@ class Tomo:
  
         return(nxroot)
 
-    def find_centers(self, nxroot):
+    def find_centers(self, nxroot, center_rows=None):
         """Find the calibrated center axis info
         """
         logger.info('Find the calibrated center axis info')
@@ -254,6 +278,22 @@ class Tomo:
         nxentry = nxroot[nxroot.attrs['default']]
         if not isinstance(nxentry, NXentry):
             raise ValueError(f'Invalid nxentry ({nxentry})')
+        if self.galaxy_flag:
+            if center_rows is None:
+                raise ValueError(f'Missing parameter center_rows ({center_rows})')
+            if not is_int_pair(center_rows):
+                raise ValueError(f'Invalid parameter center_rows ({center_rows})')
+        elif center_rows is not None:
+            logging.warning(f'Ignoring parameter center_rows ({center_rows})')
+            center_rows = None
+
+        # Create plot galaxy path directory and path if needed
+        if self.galaxy_flag:
+            if not os_path.exists('tomo_find_centers_plots'):
+                mkdir('tomo_find_centers_plots')
+            path = 'tomo_find_centers_plots'
+        else:
+            path = self.output_folder
 
         # Check if reduced data is available
         if ('reduced_data' not in nxentry or 'reduced_data' not in nxentry.data):
@@ -303,24 +343,32 @@ class Tomo:
         # center_stack order: row,theta,column
         if self.test_mode:
             lower_row = self.test_config['lower_row']
+        elif self.galaxy_flag:
+            lower_row = min(center_rows)
+            if not 0 <= lower_row < center_stack.shape[0]-1:
+                raise ValueError(f'Invalid parameter center_rows ({center_rows})')
         else:
             lower_row = select_one_image_bound(center_stack[:,0,:], 0, bound=0,
                     title=f'theta={round(thetas[0], 2)+0}',
                     bound_name='row index to find lower center', default=default)
         lower_center_offset = self._find_center_one_plane(center_stack[lower_row,:,:], lower_row,
-                thetas, eff_pixel_size, cross_sectional_dim, num_core=self.num_core)
+                thetas, eff_pixel_size, cross_sectional_dim, path=path, num_core=self.num_core)
         logger.debug(f'lower_row = {lower_row:.2f}')
         logger.debug(f'lower_center_offset = {lower_center_offset:.2f}')
 
         # Upper row center
         if self.test_mode:
             upper_row = self.test_config['upper_row']
+        elif self.galaxy_flag:
+            upper_row = max(center_rows)
+            if not lower_row < upper_row < center_stack.shape[0]:
+                raise ValueError(f'Invalid parameter center_rows ({center_rows})')
         else:
             upper_row = select_one_image_bound(center_stack[:,0,:], 0,
                     bound=center_stack.shape[0]-1, title=f'theta={round(thetas[0], 2)+0}',
                     bound_name='row index to find upper center', default=default)
         upper_center_offset = self._find_center_one_plane(center_stack[upper_row,:,:], upper_row,
-                thetas, eff_pixel_size, cross_sectional_dim, num_core=self.num_core)
+                thetas, eff_pixel_size, cross_sectional_dim, path=path, num_core=self.num_core)
         logger.debug(f'upper_row = {upper_row:.2f}')
         logger.debug(f'upper_center_offset = {upper_center_offset:.2f}')
         del center_stack
@@ -337,7 +385,7 @@ class Tomo:
 
         return(center_config)
 
-    def reconstruct_data(self, nxroot, center_info):
+    def reconstruct_data(self, nxroot, center_info, x_bounds=None, y_bounds=None):
         """Reconstruct the tomography data.
         """
         logger.info('Reconstruct the tomography data')
@@ -349,6 +397,14 @@ class Tomo:
             raise ValueError(f'Invalid nxentry ({nxentry})')
         if not isinstance(center_info, dict):
             raise ValueError(f'Invalid parameter center_info ({center_info})')
+
+        # Create plot galaxy path directory and path if needed
+        if self.galaxy_flag:
+            if not os_path.exists('tomo_reconstruct_plots'):
+                mkdir('tomo_reconstruct_plots')
+            path = 'tomo_reconstruct_plots'
+        else:
+            path = self.output_folder
 
         # Check if reduced data is available
         if ('reduced_data' not in nxentry or 'reduced_data' not in nxentry.data):
@@ -410,28 +466,36 @@ class Tomo:
             x_bounds = self.test_config.get('x_bounds')
             y_bounds = self.test_config.get('y_bounds')
             z_bounds = None
+        elif self.galaxy_flag:
+            if x_bounds is not None and not is_int_pair(x_bounds, ge=0,
+                    lt=tomo_recon_stacks[0].shape[1]):
+                raise ValueError(f'Invalid parameter x_bounds ({x_bounds})')
+            if y_bounds is not None and not is_int_pair(y_bounds, ge=0,
+                    lt=tomo_recon_stacks[0].shape[1]):
+                raise ValueError(f'Invalid parameter y_bounds ({y_bounds})')
+            z_bounds = None
         else:
             x_bounds, y_bounds, z_bounds = self._resize_reconstructed_data(tomo_recon_stacks)
         if x_bounds is None:
             x_range = (0, tomo_recon_stacks[0].shape[1])
             x_slice = int(x_range[1]/2)
         else:
-            x_range = tuple(x_bounds)
+            x_range = (min(x_bounds), max(x_bounds))
             x_slice = int((x_bounds[0]+x_bounds[1])/2)
         if y_bounds is None:
             y_range = (0, tomo_recon_stacks[0].shape[2])
             y_slice = int(y_range[1]/2)
         else:
-            y_range = tuple(y_bounds)
+            y_range = (min(y_bounds), max(y_bounds))
             y_slice = int((y_bounds[0]+y_bounds[1])/2)
         if z_bounds is None:
             z_range = (0, tomo_recon_stacks[0].shape[0])
             z_slice = int(z_range[1]/2)
         else:
-            z_range = tuple(z_bounds)
+            z_range = (min(z_bounds), max(z_bounds))
             z_slice = int((z_bounds[0]+z_bounds[1])/2)
 
-        # Create a few reconstructed image slice plots
+        # Plot a few reconstructed image slices
         if num_tomo_stacks == 1:
             basetitle = 'recon'
         else:
@@ -439,16 +503,16 @@ class Tomo:
         for i, stack in enumerate(tomo_recon_stacks):
             title = f'{basetitle} {res_title} xslice{x_slice}'
             quick_imshow(stack[z_range[0]:z_range[1],x_slice,y_range[0]:y_range[1]],
-                    title=title, path=self.output_folder, save_fig=self.save_figs,
-                    save_only=self.save_only, block=self.block)
+                    title=title, path=path, save_fig=self.save_figs, save_only=self.save_only,
+                    block=self.block)
             title = f'{basetitle} {res_title} yslice{y_slice}'
             quick_imshow(stack[z_range[0]:z_range[1],x_range[0]:x_range[1],y_slice],
-                    title=title, path=self.output_folder, save_fig=self.save_figs,
-                    save_only=self.save_only, block=self.block)
+                    title=title, path=path, save_fig=self.save_figs, save_only=self.save_only,
+                    block=self.block)
             title = f'{basetitle} {res_title} zslice{z_slice}'
             quick_imshow(stack[z_slice,x_range[0]:x_range[1],y_range[0]:y_range[1]],
-                    title=title, path=self.output_folder, save_fig=self.save_figs,
-                    save_only=self.save_only, block=self.block)
+                    title=title, path=path, save_fig=self.save_figs, save_only=self.save_only,
+                    block=self.block)
 
         # Save test data to file
         #   reconstructed data order in each stack: row/z,x,y
@@ -499,6 +563,14 @@ class Tomo:
         if not isinstance(nxentry, NXentry):
             raise ValueError(f'Invalid nxentry ({nxentry})')
 
+        # Create plot galaxy path directory and path if needed
+        if self.galaxy_flag:
+            if not os_path.exists('tomo_combine_plots'):
+                mkdir('tomo_combine_plots')
+            path = 'tomo_combine_plots'
+        else:
+            path = self.output_folder
+
         # Check if reconstructed image data is available
         if ('reconstructed_data' not in nxentry or 'reconstructed_data' not in nxentry.data):
             raise KeyError(f'Unable to find valid reconstructed image data in {nxentry}.')
@@ -537,6 +609,15 @@ class Tomo:
             x_bounds = None
             y_bounds = None
             z_bounds = self.test_config.get('z_bounds')
+        elif self.galaxy_flag:
+            exit('TODO')
+            if x_bounds is not None and not is_int_pair(x_bounds, ge=0,
+                    lt=tomo_recon_stacks[0].shape[1]):
+                raise ValueError(f'Invalid parameter x_bounds ({x_bounds})')
+            if y_bounds is not None and not is_int_pair(y_bounds, ge=0,
+                    lt=tomo_recon_stacks[0].shape[1]):
+                raise ValueError(f'Invalid parameter y_bounds ({y_bounds})')
+            z_bounds = None
         else:
             x_bounds, y_bounds, z_bounds = self._resize_reconstructed_data(tomo_recon_combined,
                     z_only=True)
@@ -559,15 +640,15 @@ class Tomo:
             z_range = z_bounds
             z_slice = int((z_bounds[0]+z_bounds[1])/2)
 
-        # Create a few combined image slice plots
+        # Plot a few combined image slices
         quick_imshow(tomo_recon_combined[z_range[0]:z_range[1],x_slice,y_range[0]:y_range[1]],
-                title=f'recon combined xslice{x_slice}', path=self.output_folder,
+                title=f'recon combined xslice{x_slice}', path=path,
                 save_fig=self.save_figs, save_only=self.save_only, block=self.block)
         quick_imshow(tomo_recon_combined[z_range[0]:z_range[1],x_range[0]:x_range[1],y_slice],
-                title=f'recon combined yslice{y_slice}', path=self.output_folder,
+                title=f'recon combined yslice{y_slice}', path=path,
                 save_fig=self.save_figs, save_only=self.save_only, block=self.block)
         quick_imshow(tomo_recon_combined[z_slice,x_range[0]:x_range[1],y_range[0]:y_range[1]],
-                title=f'recon combined zslice{z_slice}', path=self.output_folder,
+                title=f'recon combined zslice{z_slice}', path=path,
                 save_fig=self.save_figs, save_only=self.save_only, block=self.block)
 
         # Save test data to file
@@ -605,7 +686,7 @@ class Tomo:
 
         return(nxroot_copy)
 
-    def _gen_dark(self, nxentry):
+    def _gen_dark(self, nxentry, reduced_data):
         """Generate dark field.
         """
         # Get the dark field images
@@ -642,20 +723,20 @@ class Tomo:
                 tdf[tdf > tdf_cutoff] = np.nan
                 logger.debug(f'tdf_cutoff = {tdf_cutoff}')
 
+        # Remove nans
         tdf_mean = np.nanmean(tdf)
         logger.debug(f'tdf_mean = {tdf_mean}')
         np.nan_to_num(tdf, copy=False, nan=tdf_mean, posinf=tdf_mean, neginf=0.)
-#        if self.galaxy_flag:
-#            quick_imshow(tdf, title='dark field', path='setup_pngs',
-#                    save_fig=True, save_only=True)
-#        elif not self.test_mode:
-#            quick_imshow(tdf, title='dark field', path=self.output_folder,
-#                    save_fig=self.save_figs, save_only=self.save_only)
-#        quick_imshow(tdf, title='dark field', block=True)
-        if not self.test_mode:
+
+        # Plot dark field
+        if self.galaxy_flag:
+            quick_imshow(tdf, title='dark field', path='tomo_reduce_plots', save_fig=self.save_figs,
+                    save_only=self.save_only)
+        elif not self.test_mode:
             quick_imshow(tdf, title='dark field', path=self.output_folder, save_fig=self.save_figs,
                     save_only=self.save_only)
             clear_imshow('dark field')
+#        quick_imshow(tdf, title='dark field', block=True)
 
         # Add dark field to reduced data NXprocess
         reduced_data.data = NXdata()
@@ -708,17 +789,15 @@ class Tomo:
         # (avoid negative bright field values for spikes in dark field)
         tbf[tbf < 1] = 1
 
-#        if self.galaxy_flag:
-#            quick_imshow(tbf, title='bright field', path='setup_pngs',
-#                    save_fig=True, save_only=True)
-#        elif not self.test_mode:
-#            quick_imshow(tbf, title='bright field', path=self.output_folder,
-#                    save_fig=self.save_figs, save_only=self.save_only)
-#        quick_imshow(tbf, title='bright field', block=True)
-        if not self.test_mode:
+        # Plot bright field
+        if self.galaxy_flag:
+            quick_imshow(tbf, title='bright field', path='tomo_reduce_plots',
+                    save_fig=self.save_figs, save_only=self.save_only)
+        elif not self.test_mode:
             quick_imshow(tbf, title='bright field', path=self.output_folder,
                     save_fig=self.save_figs, save_only=self.save_only)
             clear_imshow('bright field')
+#        quick_imshow(tbf, title='bright field', block=True)
 
         # Add bright field to reduced data NXprocess
         if 'data' not in reduced_data: 
@@ -727,16 +806,12 @@ class Tomo:
 
         return(reduced_data)
 
-    def _set_detector_bounds(self, nxentry, reduced_data):
+    def _set_detector_bounds(self, nxentry, reduced_data, img_x_bounds=None):
         """Set vertical detector bounds for each image stack.
         Right now the range is the same for each set in the image stack.
         """
         if self.test_mode:
             return(tuple(self.test_config['img_x_bounds']))
-
-        # Get bright field
-        tbf = np.asarray(reduced_data.data.bright_field)
-        tbf_shape = tbf.shape
 
         # Get the first tomography image and the reference heights
         image_key = nxentry.instrument.detector.get('image_key', None)
@@ -762,9 +837,14 @@ class Tomo:
 
         # Select image bounds
         title = f'tomography image at theta={round(theta, 2)+0}'
+        if (img_x_bounds is not None and not is_index_range(img_x_bounds, ge=0,
+                le=first_image.shape[0])):
+            raise ValueError(f'Invalid parameter img_x_bounds ({img_x_bounds})')
         if nxentry.instrument.source.attrs['station'] in ('id1a3', 'id3a'):
             pixel_size = nxentry.instrument.detector.x_pixel_size
             # Try to get a fit from the bright field
+            tbf = np.asarray(reduced_data.data.bright_field)
+            tbf_shape = tbf.shape
             x_sum = np.sum(tbf, 1)
             x_sum_min = x_sum.min()
             x_sum_max = x_sum.max()
@@ -812,38 +892,41 @@ class Tomo:
                     # Center the default range
                     x_low = int(0.5*(tbf_shape[0]-num_x_min))
                     x_upp = x_low+num_x_min
-            tmp = np.copy(tbf)
-            tmp_max = tmp.max()
-            tmp[x_low,:] = tmp_max
-            tmp[x_upp-1,:] = tmp_max
-            quick_imshow(tmp, title='bright field')
-            tmp = np.copy(first_image)
-            tmp_max = tmp.max()
-            tmp[x_low,:] = tmp_max
-            tmp[x_upp-1,:] = tmp_max
-            quick_imshow(tmp, title=title)
-            del tmp
-            quick_plot((range(x_sum.size), x_sum),
-                    ([x_low, x_low], [x_sum_min, x_sum_max], 'r-'),
-                    ([x_upp, x_upp], [x_sum_min, x_sum_max], 'r-'),
-                    title='sum over theta and y')
-            print(f'lower bound = {x_low} (inclusive)')
-            print(f'upper bound = {x_upp} (exclusive)]')
-            accept =  input_yesno('Accept these bounds (y/n)?', 'y')
-            clear_imshow('bright field')
-            clear_imshow(title)
-            clear_plot('sum over theta and y')
-            if accept:
+            if self.galaxy_flag:
                 img_x_bounds = (x_low, x_upp)
             else:
-                while True:
-                    mask, img_x_bounds = draw_mask_1d(x_sum, title='select x data range',
-                            legend='sum over theta and y')
-                    if len(img_x_bounds) == 1:
-                        break
-                    else:
-                        print(f'Choose a single connected data range')
-                img_x_bounds = tuple(img_x_bounds[0])
+                tmp = np.copy(tbf)
+                tmp_max = tmp.max()
+                tmp[x_low,:] = tmp_max
+                tmp[x_upp-1,:] = tmp_max
+                quick_imshow(tmp, title='bright field')
+                tmp = np.copy(first_image)
+                tmp_max = tmp.max()
+                tmp[x_low,:] = tmp_max
+                tmp[x_upp-1,:] = tmp_max
+                quick_imshow(tmp, title=title)
+                del tmp
+                quick_plot((range(x_sum.size), x_sum),
+                        ([x_low, x_low], [x_sum_min, x_sum_max], 'r-'),
+                        ([x_upp, x_upp], [x_sum_min, x_sum_max], 'r-'),
+                        title='sum over theta and y')
+                print(f'lower bound = {x_low} (inclusive)')
+                print(f'upper bound = {x_upp} (exclusive)]')
+                accept =  input_yesno('Accept these bounds (y/n)?', 'y')
+                clear_imshow('bright field')
+                clear_imshow(title)
+                clear_plot('sum over theta and y')
+                if accept:
+                    img_x_bounds = (x_low, x_upp)
+                else:
+                    while True:
+                        mask, img_x_bounds = draw_mask_1d(x_sum, title='select x data range',
+                                legend='sum over theta and y')
+                        if len(img_x_bounds) == 1:
+                            break
+                        else:
+                            print(f'Choose a single connected data range')
+                    img_x_bounds = tuple(img_x_bounds[0])
             if (num_tomo_stacks > 1 and img_x_bounds[1]-img_x_bounds[0]+1 < 
                     int((delta_z-0.5*pixel_size)/pixel_size)):
                 logger.warning('Image bounds and pixel size prevent seamless stacking')
@@ -852,41 +935,39 @@ class Tomo:
                 raise NotImplementedError('Selecting image bounds for multiple stacks on FMB')
             # For FMB: use the first tomography image to select range
             # RV: revisit if they do tomography with multiple stacks
-            quick_imshow(first_image, title=title)
             x_sum = np.sum(first_image, 1)
             x_sum_min = x_sum.min()
             x_sum_max = x_sum.max()
-            print('Select vertical data reduction range from first tomography image')
-            img_x_bounds = select_image_bounds(first_image, 0, title=title)
-            clear_imshow(title)
-            if img_x_bounds is None:
-                raise ValueError('Unable to select image bounds')
-        logger.debug(f'img_x_bounds: {img_x_bounds}')
+            if self.galaxy_flag:
+                if img_x_bounds is None:
+                    img_x_bounds = (0, first_image.shape[0])
+            else:
+                quick_imshow(first_image, title=title)
+                print('Select vertical data reduction range from first tomography image')
+                img_x_bounds = select_image_bounds(first_image, 0, title=title)
+                clear_imshow(title)
+                if img_x_bounds is None:
+                    raise ValueError('Unable to select image bounds')
 
+        # Plot results
+        if self.galaxy_flag:
+            path = 'tomo_reduce_plots'
+        else:
+            path = self.output_folder
         x_low = img_x_bounds[0]
         x_upp = img_x_bounds[1]
-        tmp = np.copy(tbf)
-        tmp_max = tmp.max()
-        tmp[x_low,:] = tmp_max
-        tmp[x_upp-1,:] = tmp_max
-        quick_imshow(tmp, title='bright field', path=self.output_folder, save_fig=self.save_figs,
-                save_only=self.save_only, block=self.block)
         tmp = np.copy(first_image)
         tmp_max = tmp.max()
         tmp[x_low,:] = tmp_max
         tmp[x_upp-1,:] = tmp_max
-        quick_imshow(tmp, title=title, path=self.output_folder, save_fig=self.save_figs,
-                save_only=self.save_only, block=self.block)
+        quick_imshow(tmp, title=title, path=path, save_fig=self.save_figs, save_only=self.save_only,
+                block=self.block)
         del tmp
         quick_plot((range(x_sum.size), x_sum),
                 ([x_low, x_low], [x_sum_min, x_sum_max], 'r-'),
                 ([x_upp, x_upp], [x_sum_min, x_sum_max], 'r-'),
-                title='sum over theta and y', path=self.output_folder, save_fig=self.save_figs,
+                title='sum over theta and y', path=path, save_fig=self.save_figs,
                 save_only=self.save_only, block=self.block)
-#        if not self.block:
-#            clear_imshow('bright field')
-#            clear_plot(title)
-#            clear_plot('sum over theta and y')
 
         return(img_x_bounds)
 
@@ -985,6 +1066,10 @@ class Tomo:
                 tomo_stacks = [tomo_stacks]
 
         reduced_tomo_stacks = []
+        if self.galaxy_flag:
+            path = 'tomo_reduce_plots'
+        else:
+            path = self.output_folder
         for i, tomo_stack in enumerate(tomo_stacks):
             # Resize the tomography images
             # Right now the range is the same for each set in the image stack.
@@ -1030,8 +1115,8 @@ class Tomo:
                     title = f'red fullres theta {round(thetas[0], 2)+0}'
                 else:
                     title = f'red stack {i} fullres theta {round(thetas[0], 2)+0}'
-                quick_imshow(tomo_stack[0,:,:], title=title, path=self.output_folder,
-                        save_fig=self.save_figs, save_only=self.save_only, block=self.block)
+                quick_imshow(tomo_stack[0,:,:], title=title, path=path, save_fig=self.save_figs,
+                        save_only=self.save_only, block=self.block)
 #                if not self.block:
 #                    clear_imshow(title)
             if False and zoom_perc != 100:
@@ -1047,8 +1132,8 @@ class Tomo:
                 del tomo_zoom_list
                 if not self.test_mode:
                     title = f'red stack {zoom_perc}p theta {round(thetas[0], 2)+0}'
-                    quick_imshow(tomo_stack[0,:,:], title=title, path=self.output_folder,
-                            save_fig=self.save_figs, save_only=self.save_only, block=self.block)
+                    quick_imshow(tomo_stack[0,:,:], title=title, path=path, save_fig=self.save_figs,
+                            save_only=self.save_only, block=self.block)
 #                    if not self.block:
 #                        clear_imshow(title)
 
@@ -1079,7 +1164,7 @@ class Tomo:
         return(reduced_data)
 
     def _find_center_one_plane(self, sinogram, row, thetas, eff_pixel_size, cross_sectional_dim,
-            tol=0.1, num_core=1):
+            path=None, tol=0.1, num_core=1):
         """Find center for a single tomography plane.
         """
         # Try automatic center finding routines for initial value
@@ -1108,7 +1193,7 @@ class Tomo:
         logger.info(f'Reconstructing row {row} took {time()-t0:.2f} seconds')
 
         title = f'edges row{row} center offset{center_offset_vo:.2f} Vo'
-        self._plot_edges_one_plane(recon_plane, title)
+        self._plot_edges_one_plane(recon_plane, title, path=path)
 
         # Try using phase correlation method
 #        if input_yesno('Try finding center using phase correlation (y/n)?', 'n'):
@@ -1134,7 +1219,7 @@ class Tomo:
 #            logger.info(f'Reconstructing row {row} took {time()-t0:.2f} seconds')
 #
 #            title = f'edges row{row} center_offset{center_offset:.2f} PC'
-#            self._plot_edges_one_plane(recon_plane, title)
+#            self._plot_edges_one_plane(recon_plane, title, path=path)
 
         # Select center location
 #        if input_yesno('Accept a center location (y) or continue search (n)?', 'y'):
@@ -1170,7 +1255,7 @@ class Tomo:
                 logger.info(f'Reconstructing center_offset {center_offset} took '+
                         f'{time()-t0:.2f} seconds')
                 title = f'edges row{row} center_offset{center_offset:.2f}'
-                self._plot_edges_one_plane(recon_plane, title)
+                self._plot_edges_one_plane(recon_plane, title, path=path)
             if input_int('\nContinue (0) or end the search (1)', ge=0, le=1):
                 break
 
@@ -1198,7 +1283,7 @@ class Tomo:
         else:
             logger.debug(f'sinogram range = [{dist_from_edge}, {two_offset-dist_from_edge}]')
             sinogram = tomo_plane_T[dist_from_edge:two_offset-dist_from_edge,:]
-        if plot_sinogram:
+        if not self.galaxy_flag and plot_sinogram:
             quick_imshow(sinogram.T, f'sinogram center offset{center_offset:.2f}', aspect='auto',
                     path=self.output_folder, save_fig=self.save_figs, save_only=self.save_only,
                     block=self.block)

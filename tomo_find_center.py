@@ -26,6 +26,14 @@ def __main__():
             required=False,
             type=pathlib.Path,
             help='''Full or relative path to the output file (in yaml format).''')
+    parser.add_argument('--center_rows',
+            required=True,
+            nargs=2,
+            type=int,
+            help='''Center finding rows.''')
+    parser.add_argument('--galaxy_flag',
+            action='store_true',
+            help='''Use this flag to run the scripts as a galaxy tool.''')
     parser.add_argument('-l', '--log',
 #            type=argparse.FileType('w'),
             default=sys.stdout,
@@ -63,18 +71,20 @@ def __main__():
     # Log command line arguments
     logging.info(f'input_file = {args.input_file}')
     logging.info(f'output_file = {args.output_file}')
+    logging.info(f'center_rows = {args.center_rows}')
+    logging.info(f'galaxy_flag = {args.galaxy_flag}')
     logging.debug(f'log = {args.log}')
     logging.debug(f'is log stdout? {args.log is sys.stdout}')
     logging.debug(f'log_level = {args.log_level}')
 
     # Instantiate Tomo object
-    tomo = Tomo()
+    tomo = Tomo(galaxy_flag=args.galaxy_flag)
 
     # Read input file
     data = tomo.read(args.input_file)
 
     # Find the calibrated center axis info
-    data = tomo.find_centers(data)
+    data = tomo.find_centers(data, center_rows=tuple(args.center_rows))
 
     # Write output file
     data = tomo.write(data, args.output_file)
