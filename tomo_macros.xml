@@ -1,9 +1,9 @@
 <macros>
     <xml name="requirements">
         <requirements>
-            <requirement type="package" version="1.11.0">tomopy</requirement>
-            <requirement type="package" version="3.6.0">h5py</requirement>
             <requirement type="package" version="1.0.3">lmfit</requirement>
+            <requirement type="package" version="1.0.0">nexusformat</requirement>
+            <requirement type="package" version="1.11.0">tomopy</requirement>
         </requirements>
     </xml>
     <xml name="citations">

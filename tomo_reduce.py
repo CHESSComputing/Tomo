@@ -7,9 +7,6 @@ import pathlib
 import sys
 #import tracemalloc
 
-from nexusformat.nexus import *
-
-from workflow.models import TomoWorkflow
 from workflow.run_tomo import Tomo
 
 #from memory_profiler import profile
@@ -65,7 +62,7 @@ def __main__():
         stream_handler.setLevel(logging.WARNING)
         stream_handler.setFormatter(logging.Formatter(logging_format))
 
-    # Starting memory monitoring
+    # Start memory monitoring
 #    tracemalloc.start()
 
     # Log command line arguments
@@ -92,7 +89,7 @@ def __main__():
     # Displaying memory usage
 #    logging.info(f'Memory usage: {tracemalloc.get_traced_memory()}')
  
-    # stopping memory monitoring
+    # Stop memory monitoring
 #    tracemalloc.stop()
 
 if __name__ == "__main__":

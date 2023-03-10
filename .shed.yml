@@ -1,6 +1,6 @@
 categories:
 - Structural Materials Analysis
-description: Reconstruct tomography images
+description: A set of tools to reconstruct tomography images
 name: tomo
 owner: rv43
-remote_repository_url: https://github.com/rolfverberg/galaxytools
+remote_repository_url: https://github.com/CHESSComputing/Tomo

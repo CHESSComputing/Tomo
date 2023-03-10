@@ -7,9 +7,6 @@ import pathlib
 import sys
 #import tracemalloc
 
-from nexusformat.nexus import *
-
-from workflow.models import TomoWorkflow
 from workflow.run_tomo import Tomo
 
 #from memory_profiler import profile

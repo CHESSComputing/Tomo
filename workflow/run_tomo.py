@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-# RV TODO FIX add find center metadata to Nexus file
-
 import logging
 logger = logging.getLogger(__name__)
 

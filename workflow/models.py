@@ -5,10 +5,6 @@ logger = logging.getLogger(__name__)
 
 import logging
 
-try:
-    import h5py
-except:
-    pass
 import numpy as np
 import os
 import yaml
@@ -22,7 +18,10 @@ from nexusformat.nexus import *
 from time import time
 from typing import Optional, Literal
 from typing_extensions import TypedDict
-from pyspec.file.spec import FileSpec
+try:
+    from pyspec.file.spec import FileSpec
+except:
+    pass
 
 from msnctools.general import is_int, is_num, input_int, input_int_list, input_num, input_yesno, \
         input_menu, index_nearest, string_to_list, file_exists_and_readable
