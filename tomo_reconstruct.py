@@ -22,11 +22,11 @@ def __main__():
     parser.add_argument('-c', '--center_file',
             required=True,
             type=pathlib.Path,
-            help='''Full or relative path to the center info file (in Nexus format).''')
+            help='''Full or relative path to the center info file (in yaml format).''')
     parser.add_argument('-o', '--output_file',
             required=False,
             type=pathlib.Path,
-            help='''Full or relative path to the output file (in yaml format).''')
+            help='''Full or relative path to the output file (in Nexus format).''')
     parser.add_argument('--galaxy_flag',
             action='store_true',
             help='''Use this flag to run the scripts as a galaxy tool.''')

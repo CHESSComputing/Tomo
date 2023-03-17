@@ -24,7 +24,6 @@ def __main__():
             type=pathlib.Path,
             help='''Full or relative path to the output file (in yaml format).''')
     parser.add_argument('--center_rows',
-            required=True,
             nargs=2,
             type=int,
             help='''Center finding rows.''')
@@ -81,7 +80,7 @@ def __main__():
     data = tomo.read(args.input_file)
 
     # Find the calibrated center axis info
-    data = tomo.find_centers(data, center_rows=tuple(args.center_rows))
+    data = tomo.find_centers(data, center_rows=args.center_rows)
 
     # Write output file
     data = tomo.write(data, args.output_file)

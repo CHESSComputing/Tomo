@@ -277,7 +277,7 @@ class Tomo:
  
         return(nxroot)
 
-    def find_centers(self, nxroot, center_rows=None):
+    def find_centers(self, nxroot, center_rows=None, center_stack_index=None):
         """Find the calibrated center axis info
         """
         logger.info('Find the calibrated center axis info')
@@ -288,13 +288,19 @@ class Tomo:
         if not isinstance(nxentry, NXentry):
             raise ValueError(f'Invalid nxentry ({nxentry})')
         if self.galaxy_flag:
-            if center_rows is None:
-                raise ValueError(f'Missing parameter center_rows ({center_rows})')
-            if not is_int_pair(center_rows):
-                raise ValueError(f'Invalid parameter center_rows ({center_rows})')
+            if center_rows is not None:
+                center_rows = tuple(center_rows)
+                if not is_int_pair(center_rows):
+                    raise ValueError(f'Invalid parameter center_rows ({center_rows})')
         elif center_rows is not None:
             logger.warning(f'Ignoring parameter center_rows ({center_rows})')
             center_rows = None
+        if self.galaxy_flag:
+            if center_stack_index is not None and not is_int(center_stack_index, ge=0):
+                raise ValueError(f'Invalid parameter center_stack_index ({center_stack_index})')
+        elif center_stack_index is not None:
+            logger.warning(f'Ignoring parameter center_stack_index ({center_stack_index})')
+            center_stack_index = None
 
         # Create plot galaxy path directory and path if needed
         if self.galaxy_flag:
@@ -322,6 +328,11 @@ class Tomo:
         else:
             if self.test_mode:
                 center_stack_index = self.test_config['center_stack_index']-1 # make offset 0
+            elif self.galaxy_flag:
+                if center_stack_index is None:
+                    center_stack_index = int(num_tomo_stacks/2)
+                if center_stack_index >= num_tomo_stacks:
+                    raise ValueError(f'Invalid parameter center_stack_index ({center_stack_index})')
             else:
                 center_stack_index = input_int('\nEnter tomography stack index to calibrate the '
                         'center axis', ge=1, le=num_tomo_stacks, default=int(1+num_tomo_stacks/2))
@@ -349,9 +360,12 @@ class Tomo:
         if self.test_mode:
             lower_row = self.test_config['lower_row']
         elif self.galaxy_flag:
-            lower_row = min(center_rows)
-            if not 0 <= lower_row < tomo_fields_shape[2]-1:
-                raise ValueError(f'Invalid parameter center_rows ({center_rows})')
+            if center_rows is None:
+                lower_row = 0
+            else:
+                lower_row = min(center_rows)
+                if not 0 <= lower_row < tomo_fields_shape[2]-1:
+                    raise ValueError(f'Invalid parameter center_rows ({center_rows})')
         else:
             lower_row = select_one_image_bound(
                     nxentry.reduced_data.data.tomo_fields[center_stack_index,0,:,:], 0, bound=0,
@@ -360,6 +374,7 @@ class Tomo:
         logger.debug('Finding center...')
         t0 = time()
         lower_center_offset = self._find_center_one_plane(
+                #np.asarray(nxentry.reduced_data.data.tomo_fields[center_stack_index,:,lower_row,:]),
                 nxentry.reduced_data.data.tomo_fields[center_stack_index,:,lower_row,:],
                 lower_row, thetas, eff_pixel_size, cross_sectional_dim, path=path,
                 num_core=self.num_core)
@@ -371,9 +386,12 @@ class Tomo:
         if self.test_mode:
             upper_row = self.test_config['upper_row']
         elif self.galaxy_flag:
-            upper_row = max(center_rows)
-            if not lower_row < upper_row < tomo_fields_shape[2]:
-                raise ValueError(f'Invalid parameter center_rows ({center_rows})')
+            if center_rows is None:
+                upper_row = tomo_fields_shape[2]-1
+            else:
+                upper_row = max(center_rows)
+                if not lower_row < upper_row < tomo_fields_shape[2]:
+                    raise ValueError(f'Invalid parameter center_rows ({center_rows})')
         else:
             upper_row = select_one_image_bound(
                     nxentry.reduced_data.data.tomo_fields[center_stack_index,0,:,:], 0,
@@ -382,6 +400,7 @@ class Tomo:
         logger.debug('Finding center...')
         t0 = time()
         upper_center_offset = self._find_center_one_plane(
+                #np.asarray(nxentry.reduced_data.data.tomo_fields[center_stack_index,:,upper_row,:]),
                 nxentry.reduced_data.data.tomo_fields[center_stack_index,:,upper_row,:],
                 upper_row, thetas, eff_pixel_size, cross_sectional_dim, path=path,
                 num_core=self.num_core)
@@ -569,7 +588,7 @@ class Tomo:
 
         return(nxroot_copy)
 
-    def combine_data(self, nxroot):
+    def combine_data(self, nxroot, x_bounds=None, y_bounds=None):
         """Combine the reconstructed tomography stacks.
         """
         logger.info('Combine the reconstructed tomography stacks')
@@ -626,7 +645,6 @@ class Tomo:
             y_bounds = None
             z_bounds = self.test_config.get('z_bounds')
         elif self.galaxy_flag:
-            exit('TODO')
             if x_bounds is not None and not is_int_pair(x_bounds, ge=0,
                     lt=tomo_recon_stacks[0].shape[1]):
                 raise ValueError(f'Invalid parameter x_bounds ({x_bounds})')
@@ -1157,6 +1175,9 @@ class Tomo:
 
             # Save test data to file
             if self.test_mode:
+#                row_index = int(tomo_stack.shape[0]/2)
+#                np.savetxt(f'{self.output_folder}/red_stack_{i+1}.txt', tomo_stack[row_index,:,:],
+#                        fmt='%.6e')
                 row_index = int(tomo_stack.shape[1]/2)
                 np.savetxt(f'{self.output_folder}/red_stack_{i+1}.txt', tomo_stack[:,row_index,:],
                         fmt='%.6e')

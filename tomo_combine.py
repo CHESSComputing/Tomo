@@ -23,6 +23,9 @@ def __main__():
             required=False,
             type=pathlib.Path,
             help='''Full or relative path to the output file (in yaml format).''')
+    parser.add_argument('--galaxy_flag',
+            action='store_true',
+            help='''Use this flag to run the scripts as a galaxy tool.''')
     parser.add_argument('-l', '--log',
 #            type=argparse.FileType('w'),
             default=sys.stdout,
@@ -31,6 +34,16 @@ def __main__():
             choices=logging._nameToLevel.keys(),
             default='INFO',
             help='''Specify a preferred logging level.''')
+    parser.add_argument('--x_bounds',
+            required=False,
+            nargs=2,
+            type=int,
+            help='''Boundaries of reconstructed images in x-direction.''')
+    parser.add_argument('--y_bounds',
+            required=False,
+            nargs=2,
+            type=int,
+            help='''Boundaries of reconstructed images in y-direction.''')
     args = parser.parse_args()
 
     # Set log configuration
@@ -63,18 +76,21 @@ def __main__():
     logging.debug(f'log = {args.log}')
     logging.debug(f'is log stdout? {args.log is sys.stdout}')
     logging.debug(f'log_level = {args.log_level}')
+    logging.info(f'x_bounds = {args.x_bounds}')
+    logging.info(f'y_bounds = {args.y_bounds}')
 
     # Instantiate Tomo object
-    tomo = Tomo()
+    tomo = Tomo(galaxy_flag=args.galaxy_flag)
 
     # Read input file
     data = tomo.read(args.input_file)
 
     # Combine the reconstructed tomography stacks
-    data = tomo.combine_data(data)
+    data = tomo.combine_data(data, x_bounds=args.x_bounds, y_bounds=args.y_bounds)
 
     # Write output file
-    data = tomo.write(data, args.output_file)
+    if data is not None:
+        data = tomo.write(data, args.output_file)
 
     # Displaying memory usage
 #    logging.info(f'Memory usage: {tracemalloc.get_traced_memory()}')
