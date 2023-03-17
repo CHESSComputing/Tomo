@@ -37,10 +37,12 @@ def get_folder_id(gi, path):
 def link_to_galaxy(filename:str, galaxy=None, user=None, password=None, api_key=None) -> None:
     # Read input file
     extension = path.splitext(filename)[1]
-    if extension == '.yml' or extension == '.yaml':
-        with open(filename, 'r') as f:
-            data = safe_load(f)
-    elif extension == '.nxs':
+# RV yaml input not incorporated yet, since Galaxy can't use pyspec right now
+#    if extension == '.yml' or extension == '.yaml':
+#        with open(filename, 'r') as f:
+#            data = safe_load(f)
+#    elif extension == '.nxs':
+    if extension == '.nxs':
         with NXFile(filename, mode='r') as nxfile:
             data = nxfile.readfile()
     else:
@@ -53,7 +55,9 @@ def link_to_galaxy(filename:str, galaxy=None, user=None, password=None, api_key=
         nxroot = NXroot()
         for sample_map in wf.sample_maps:
             import_scanparser(sample_map.station)
-            sample_map.construct_nxentry(nxroot, include_raw_data=False)
+# RV raw data must be included, since Galaxy can't use pyspec right now
+#            sample_map.construct_nxentry(nxroot, include_raw_data=False)
+            sample_map.construct_nxentry(nxroot, include_raw_data=True)
         nxentry = nxroot[nxroot.attrs['default']]
     elif isinstance(data, NXroot):
         nxentry = data[data.attrs['default']]

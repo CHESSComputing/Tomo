@@ -1,6 +1,0 @@
-categories:
-- Structural Materials Analysis
-description: A set of tools to reconstruct tomography images
-name: tomo
-owner: rv43
-remote_repository_url: https://github.com/CHESSComputing/Tomo

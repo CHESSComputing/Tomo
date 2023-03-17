@@ -18,9 +18,9 @@ def __main__():
     parser.add_argument('-i', '--input_file',
             required=True,
             type=pathlib.Path,
-            help='''Full or relative path to the input file (in yaml format).''')
+            help='''Full or relative path to the input file (in yaml or nxs format).''')
     parser.add_argument('-o', '--output_file',
-            required=False,
+            required=True,
             type=pathlib.Path,
             help='''Full or relative path to the output file (in Nexus format).''')
     parser.add_argument('--galaxy_flag',

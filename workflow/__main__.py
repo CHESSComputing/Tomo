@@ -202,9 +202,9 @@ tomo_parser.add_argument('--reconstruct_data',
         const='reconstruct_data',
         action='append_const',
         help='''Use this flag to create and add reconstructed data data to the input file.''')
-tomo_parser.add_argument('--combine_datas',
+tomo_parser.add_argument('--combine_data',
         dest='modes',
-        const='combine_datas',
+        const='combine_data',
         action='append_const',
         help='''Use this flag to combine reconstructed data data and add to the input file.''')
 
