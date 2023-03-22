@@ -11,6 +11,7 @@ __pycache__
 backup
 tests/test1/output/actual/**
 tests/test2/output/actual/**
+tests/test3/output/actual/**
 /test_*
 /run_*
 **/tomo.log

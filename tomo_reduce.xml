@@ -1,29 +1,53 @@
-<tool id="tomo_reduce" name="Tomo Reduce" version="0.1.0" python_template_version="3.9">
+<tool id="tomo_reduce" name="Tomo Reduce" version="1.0.0" python_template_version="3.9">
     <description>Reduce tomography images</description>
     <macros>
         <import>tomo_macros.xml</import>
     </macros>
-    <expand macro="requirements" />
+    <expand macro="requirements"/>
     <command detect_errors="exit_code">
         <![CDATA[
             mkdir tomo_reduce_plots;
             $__tool_directory__/tomo_reduce.py
-            --input_file '$input_file'
-            --output_file 'output.nxs'
+            --input_file "$input_file"
+            --output_file "output.nex"
             --galaxy_flag
-            --img_x_bounds $x_bounds.x_bound_low $x_bounds.x_bound_upp
-            -l '$log'
+            #if str($station.type_selector) == "id3b"
+                #if str($station.img_bounds.type_selector) == "enter_range"
+                    --img_x_bounds $station.img_bounds.low $station.img_bounds.upp
+                #end if
+            #end if
+            -l "$log"
         ]]>
     </command>
     <inputs>
         <param name="input_file" type="data" optional="false" label="Input file"/>
+        <conditional name="station">
+            <param name="type_selector" type="select" display="radio" label="Choose station">
+                <option value="id3a" selected="true">id3a (SMB)</option>
+                <option value="id3b">id3b (FMB)</option>
+            </param>
+            <when value="id3a"/>
+            <when value="id3b">
+                <conditional name="img_bounds">
+                    <param name="type_selector" type="select" display="radio" label="Choose image range for data reduction">
+                        <option value="enter_range" selected="true">Manually enter the image range</option>
+                        <option value="full_range">Use the full image range</option>
+                    </param>
+                    <when value="enter_range">
+                        <param name="low" type="integer" value="-1" optional="false" label="Lower image range index in vertical direction"/>
+                        <param name="upp" type="integer" value="-1" optional="false" label="Upper image range index in vertical direction"/>
+                    </when>
+                    <when value="full_range"/>
+                </conditional>
+            </when>
+        </conditional>
     </inputs>
     <outputs>
         <expand macro="common_outputs"/>
-        <collection name="tomo_reduce_plots" type="list" label="Tomo data reduction images">
+        <collection name="tomo_reduce_plots" type="list" label="Data reduction images">
             <discover_datasets pattern="__name_and_ext__" directory="tomo_reduce_plots"/>
         </collection>
-        <data name="output_file" format="nxs" label="Reduced tomography data" from_work_dir="output.nxs"/>
+        <data name="output_file" format="nex" label="Reduced tomography data" from_work_dir="output.nex"/>
     </outputs>
     <help>
         <![CDATA[

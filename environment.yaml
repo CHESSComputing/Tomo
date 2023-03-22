@@ -1,22 +1,20 @@
 name: tomopy
 channels:
-  - astra-toolbox
   - conda-forge
   - defaults
   - file:///nfs/chess/sw/miniconda3_msnc/envs/build_msnctools/conda-bld
 dependencies:
-  - astra-toolbox==2.1.2
-  - h5py==3.6.0
+#  - h5py==3.6.0
   - lmfit==1.0.3
   - matplotlib==3.5.2
   - msnctools=2023.1.*
-  - nexusformat
-  - pip==22.3.1
-  - pydantic
+  - nexusformat==1.0.0
+  - pip==23.0.1
+  - pydantic==1.10.6
   - python==3.9.13
   - tomopy==1.12.2
-  - xarray
+#  - xarray==2022.11.0
 # Optional
 #  - jupyter
-  - jupyterlab==3.5.0
+#  - jupyterlab==3.5.0
 #  - spyder

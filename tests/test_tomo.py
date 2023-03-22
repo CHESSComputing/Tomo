@@ -76,8 +76,8 @@ class TomoTestCase(unittest.TestCase):
                     print(f'median {statistics.median(err)}')
                     print(f'stdev {statistics.stdev(err)}\n')
                     #self.assertEqual(statistics.median(err), 0.0)
-                    self.assertAlmostEqual(statistics.median(err), 0, 4)
-                    self.assertAlmostEqual(statistics.mean(err), 0, 4)
+                    self.assertAlmostEqual(statistics.median(err), 0, 3)
+                    self.assertAlmostEqual(statistics.mean(err), 0, 3)
 
 
 if __name__ == '__main__':

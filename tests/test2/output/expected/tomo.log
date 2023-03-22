@@ -1,22 +1,26 @@
-2023-02-24 10:41:11,731 : INFO - run_tomo : run_tomo - input_file = tests/test2/config.yaml
-2023-02-24 10:41:11,731 : INFO - run_tomo : run_tomo - center_file = None
-2023-02-24 10:41:11,731 : INFO - run_tomo : run_tomo - output_file = tests/test2/output/actual/output.nxs
-2023-02-24 10:41:11,731 : INFO - run_tomo : run_tomo - output_folder = tests/test2/output/actual/
-2023-02-24 10:41:11,731 : INFO - run_tomo : run_tomo - save_figs = only
-2023-02-24 10:41:11,731 : INFO - run_tomo : run_tomo - test_mode = True
-2023-02-24 10:41:11,737 : INFO - run_tomo : gen_reduced_data - Generate the reduced tomography images
-2023-02-24 10:41:11,921 : INFO - run_tomo : gen_reduced_data - Start constructing the z-3234-A map.
-2023-02-24 10:41:13,206 : INFO - run_tomo : gen_reduced_data - Constructed all sample maps in 1.29 seconds.
-2023-02-24 10:41:16,017 : INFO - run_tomo : gen_reduced_data - img_x_bounds = (582, 1509)
-2023-02-24 10:41:51,373 : INFO - run_tomo : find_centers - Find the calibrated center axis info
-2023-02-24 10:41:51,374 : INFO - run_tomo : find_centers - Determine center offset at sample row boundaries
-2023-02-24 10:42:11,423 : INFO - run_tomo : _find_center_one_plane - Finding the center using Nghia Vo’s method took 20.05 seconds
-2023-02-24 10:42:11,423 : INFO - run_tomo : _find_center_one_plane - Center at row 100 using Nghia Vo’s method = 56.00
-2023-02-24 10:43:02,184 : INFO - run_tomo : _find_center_one_plane - Reconstructing row 100 took 50.76 seconds
-2023-02-24 10:43:29,106 : INFO - run_tomo : _find_center_one_plane - Finding the center using Nghia Vo’s method took 20.94 seconds
-2023-02-24 10:43:29,106 : INFO - run_tomo : _find_center_one_plane - Center at row 826 using Nghia Vo’s method = 40.25
-2023-02-24 10:44:21,606 : INFO - run_tomo : _find_center_one_plane - Reconstructing row 826 took 52.50 seconds
-2023-02-24 10:44:25,922 : INFO - run_tomo : reconstruct_data - Reconstruct the tomography data
-2023-02-24 10:44:46,132 : INFO - algorithm : _dist_recon - Reconstructing 256 slice groups with 256 master threads...
-2023-02-24 10:44:49,254 : INFO - run_tomo : _reconstruct_one_tomo_stack - Performing initial image reconstruction took 3.12 seconds
-2023-02-24 10:44:59,947 : INFO - run_tomo : reconstruct_data - Reconstruction of stack 0 took 34.02 seconds
+2023-03-22 15:18:15,991 : INFO - run_tomo : run_tomo - input_file = tests/test2/config.yaml
+2023-03-22 15:18:15,991 : INFO - run_tomo : run_tomo - center_file = None
+2023-03-22 15:18:15,991 : INFO - run_tomo : run_tomo - output_file = tests/test2/output/actual/output.nxs
+2023-03-22 15:18:15,991 : INFO - run_tomo : run_tomo - output_folder = tests/test2/output/actual/
+2023-03-22 15:18:15,992 : INFO - run_tomo : run_tomo - save_figs = only
+2023-03-22 15:18:15,992 : INFO - run_tomo : run_tomo - test_mode = True
+2023-03-22 15:18:15,992 : INFO - run_tomo : read - looking for tests/test2/config.yaml
+2023-03-22 15:18:15,998 : INFO - run_tomo : gen_reduced_data - Generate the reduced tomography images
+2023-03-22 15:18:16,228 : INFO - run_tomo : gen_reduced_data - Start constructing the z-3234-A map.
+2023-03-22 15:18:17,614 : INFO - run_tomo : gen_reduced_data - Constructed all sample maps in 1.39 seconds.
+2023-03-22 15:18:20,559 : INFO - run_tomo : gen_reduced_data - img_x_bounds = (582, 1509)
+2023-03-22 15:18:48,298 : INFO - run_tomo : find_centers - Find the calibrated center axis info
+2023-03-22 15:18:48,299 : INFO - run_tomo : find_centers - Determine center offset at sample row boundaries
+2023-03-22 15:19:21,286 : INFO - run_tomo : _find_center_one_plane - Finding the center using Nghia Vo’s method took 32.99 seconds
+2023-03-22 15:19:21,287 : INFO - run_tomo : _find_center_one_plane - Center at row 100 using Nghia Vo’s method = 56.00
+2023-03-22 15:20:09,796 : INFO - run_tomo : _find_center_one_plane - Reconstructing row 100 took 48.51 seconds
+2023-03-22 15:20:47,090 : INFO - run_tomo : _find_center_one_plane - Finding the center using Nghia Vo’s method took 32.82 seconds
+2023-03-22 15:20:47,090 : INFO - run_tomo : _find_center_one_plane - Center at row 826 using Nghia Vo’s method = 40.25
+2023-03-22 15:21:41,100 : INFO - run_tomo : _find_center_one_plane - Reconstructing row 826 took 54.01 seconds
+2023-03-22 15:21:45,623 : INFO - run_tomo : reconstruct_data - Reconstruct the tomography data
+2023-03-22 15:22:07,891 : INFO - algorithm : _dist_recon - Reconstructing 256 slice groups with 256 master threads...
+2023-03-22 15:22:13,571 : INFO - run_tomo : _reconstruct_one_tomo_stack - Performing initial image reconstruction took 5.68 seconds
+2023-03-22 15:22:28,990 : INFO - run_tomo : reconstruct_data - Reconstruction of stack 1 took 43.37 seconds
+2023-03-22 15:22:30,741 : INFO - run_tomo : combine_data - Combine the reconstructed tomography stacks
+2023-03-22 15:22:30,741 : INFO - run_tomo : combine_data - Only one stack available: leaving combine_data
+2023-03-22 15:22:30,741 : INFO - run_tomo : run_tomo - Completed modes: ['all']

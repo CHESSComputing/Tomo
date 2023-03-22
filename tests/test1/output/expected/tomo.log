@@ -1,23 +1,28 @@
-2023-02-24 10:26:59,210 : INFO - run_tomo : run_tomo - input_file = tests/test1/config.yaml
-2023-02-24 10:26:59,210 : INFO - run_tomo : run_tomo - center_file = None
-2023-02-24 10:26:59,210 : INFO - run_tomo : run_tomo - output_file = tests/test1/output/actual/output.nxs
-2023-02-24 10:26:59,211 : INFO - run_tomo : run_tomo - output_folder = tests/test1/output/actual/
-2023-02-24 10:26:59,211 : INFO - run_tomo : run_tomo - save_figs = only
-2023-02-24 10:26:59,211 : INFO - run_tomo : run_tomo - test_mode = True
-2023-02-24 10:26:59,216 : INFO - run_tomo : gen_reduced_data - Generate the reduced tomography images
-2023-02-24 10:26:59,221 : INFO - run_tomo : gen_reduced_data - Start constructing the sobhani-3249-A map.
-2023-02-24 10:26:59,232 : INFO - run_tomo : gen_reduced_data - Constructed all sample maps in 0.01 seconds.
-2023-02-24 10:27:00,684 : WARNING - run_tomo : _gen_bright - Dark field unavailable
-2023-02-24 10:27:00,686 : INFO - run_tomo : gen_reduced_data - img_x_bounds = (620, 950)
-2023-02-24 10:27:17,763 : INFO - run_tomo : find_centers - Find the calibrated center axis info
-2023-02-24 10:27:17,763 : INFO - run_tomo : find_centers - Determine center offset at sample row boundaries
-2023-02-24 10:27:21,279 : INFO - run_tomo : _find_center_one_plane - Finding the center using Nghia Vo’s method took 3.52 seconds
-2023-02-24 10:27:21,279 : INFO - run_tomo : _find_center_one_plane - Center at row 50 using Nghia Vo’s method = -49.25
-2023-02-24 10:27:28,837 : INFO - run_tomo : _find_center_one_plane - Reconstructing row 50 took 7.56 seconds
-2023-02-24 10:27:35,648 : INFO - run_tomo : _find_center_one_plane - Finding the center using Nghia Vo’s method took 2.78 seconds
-2023-02-24 10:27:35,648 : INFO - run_tomo : _find_center_one_plane - Center at row 270 using Nghia Vo’s method = -49.00
-2023-02-24 10:27:42,637 : INFO - run_tomo : _find_center_one_plane - Reconstructing row 270 took 6.99 seconds
-2023-02-24 10:27:46,662 : INFO - run_tomo : reconstruct_data - Reconstruct the tomography data
-2023-02-24 10:27:47,759 : INFO - algorithm : _dist_recon - Reconstructing 256 slice groups with 256 master threads...
-2023-02-24 10:27:48,954 : INFO - run_tomo : _reconstruct_one_tomo_stack - Performing initial image reconstruction took 1.20 seconds
-2023-02-24 10:27:52,094 : INFO - run_tomo : reconstruct_data - Reconstruction of stack 0 took 5.43 seconds
+2023-03-22 15:16:34,648 : INFO - run_tomo : run_tomo - input_file = tests/test1/config.yaml
+2023-03-22 15:16:34,648 : INFO - run_tomo : run_tomo - center_file = None
+2023-03-22 15:16:34,648 : INFO - run_tomo : run_tomo - output_file = tests/test1/output/actual/output.nxs
+2023-03-22 15:16:34,648 : INFO - run_tomo : run_tomo - output_folder = tests/test1/output/actual/
+2023-03-22 15:16:34,648 : INFO - run_tomo : run_tomo - save_figs = only
+2023-03-22 15:16:34,648 : INFO - run_tomo : run_tomo - test_mode = True
+2023-03-22 15:16:34,649 : INFO - run_tomo : read - looking for tests/test1/config.yaml
+2023-03-22 15:16:34,654 : INFO - run_tomo : gen_reduced_data - Generate the reduced tomography images
+2023-03-22 15:16:34,661 : INFO - run_tomo : gen_reduced_data - Start constructing the sobhani-3249-A map.
+2023-03-22 15:16:34,730 : INFO - run_tomo : gen_reduced_data - Constructed all sample maps in 0.07 seconds.
+2023-03-22 15:16:37,125 : WARNING - run_tomo : _gen_bright - Dark field unavailable
+2023-03-22 15:16:37,127 : INFO - run_tomo : gen_reduced_data - img_x_bounds = (620, 950)
+2023-03-22 15:16:37,127 : WARNING - run_tomo : _gen_tomo - Dark field unavailable
+2023-03-22 15:17:15,707 : INFO - run_tomo : find_centers - Find the calibrated center axis info
+2023-03-22 15:17:15,707 : INFO - run_tomo : find_centers - Determine center offset at sample row boundaries
+2023-03-22 15:17:20,833 : INFO - run_tomo : _find_center_one_plane - Finding the center using Nghia Vo’s method took 5.12 seconds
+2023-03-22 15:17:20,833 : INFO - run_tomo : _find_center_one_plane - Center at row 50 using Nghia Vo’s method = -49.25
+2023-03-22 15:17:29,803 : INFO - run_tomo : _find_center_one_plane - Reconstructing row 50 took 8.97 seconds
+2023-03-22 15:17:40,873 : INFO - run_tomo : _find_center_one_plane - Finding the center using Nghia Vo’s method took 4.25 seconds
+2023-03-22 15:17:40,873 : INFO - run_tomo : _find_center_one_plane - Center at row 270 using Nghia Vo’s method = -49.00
+2023-03-22 15:17:49,762 : INFO - run_tomo : _find_center_one_plane - Reconstructing row 270 took 8.89 seconds
+2023-03-22 15:17:53,958 : INFO - run_tomo : reconstruct_data - Reconstruct the tomography data
+2023-03-22 15:17:55,652 : INFO - algorithm : _dist_recon - Reconstructing 256 slice groups with 256 master threads...
+2023-03-22 15:18:01,000 : INFO - run_tomo : _reconstruct_one_tomo_stack - Performing initial image reconstruction took 5.35 seconds
+2023-03-22 15:18:04,462 : INFO - run_tomo : reconstruct_data - Reconstruction of stack 1 took 10.50 seconds
+2023-03-22 15:18:05,326 : INFO - run_tomo : combine_data - Combine the reconstructed tomography stacks
+2023-03-22 15:18:05,327 : INFO - run_tomo : combine_data - Only one stack available: leaving combine_data
+2023-03-22 15:18:05,327 : INFO - run_tomo : run_tomo - Completed modes: ['all']

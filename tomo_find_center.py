@@ -14,7 +14,7 @@ from workflow.run_tomo import Tomo
 def __main__():
     # Parse command line arguments
     parser = argparse.ArgumentParser(
-            description='Reduce tomography data')
+            description='Find the center axis for a tomography reconstruction')
     parser.add_argument('-i', '--input_file',
             required=True,
             type=pathlib.Path,
@@ -90,6 +90,9 @@ def __main__():
  
     # stopping memory monitoring
 #    tracemalloc.stop()
+
+    logging.info('Completed find center axis')
+
 
 if __name__ == "__main__":
     __main__()

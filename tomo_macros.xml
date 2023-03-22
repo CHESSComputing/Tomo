@@ -10,19 +10,13 @@
     <xml name="citations">
         <citations>
             <citation type="bibtex">
-@misc{github_files,
+@misc{chess_tomography,
   author = {Verberg, Rolf},
-  year = {2022},
+  year = {2023},
   title = {Tomo Reconstruction},
 }</citation>
         </citations>
     </xml>
-    <!--
-    <xml name="common_inputs">
-        <param name="config" type='data' format='yaml' optional='false' label="Input config"/>
-        <param name="config" type='data' format='tomo.config.yaml' optional='true' label="Input config"/>
-    </xml>
-    -->
     <xml name="common_outputs">
         <data name="log" format="txt" label="Log"/>
     </xml>

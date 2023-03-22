@@ -1,0 +1,45 @@
+<tool id="tomo_find_center" name="Tomo Find Center Axis" version="1.0.0" python_template_version="3.9">
+    <description>Find the center axis for a tomography reconstruction</description>
+    <macros>
+        <import>tomo_macros.xml</import>
+    </macros>
+    <expand macro="requirements"/>
+    <command detect_errors="exit_code">
+        <![CDATA[
+            mkdir tomo_find_centers_plots;
+            $__tool_directory__/tomo_find_center.py
+            --input_file "$input_file"
+            --output_file "output.yaml"
+            --galaxy_flag
+            #if str($center_rows.type_selector) == "enter_range"
+                --center_rows $center_rows.low $center_rows.upp
+            #end if
+            -l "$log"
+        ]]>
+    </command>
+    <inputs>
+        <param name="input_file" type="data" format="nex" optional="false" label="Reduced tomography data"/>
+        <conditional name="center_rows">
+            <param name="type_selector" type="select" label="Choose find center axis planes">
+                <option value="full_range" selected="true">Use the top and bottom image planes</option>
+                <option value="enter_range">Manually select the image planes</option>
+            </param>
+            <when value="full_range"/>
+            <when value="enter_range">
+                <param name="low" type="integer" value="-1" optional="false" label="Lower plane index in vertical direction"/>
+                <param name="upp" type="integer" value="-1" optional="false" label="Upper plane index in vertical direction"/>
+            </when>
+        </conditional>
+    </inputs>
+    <outputs>
+        <expand macro="common_outputs"/>
+        <collection name="tomo_find_centers_plots" type="list" label="Find center images">
+            <discover_datasets pattern="__name_and_ext__" directory="tomo_find_centers_plots"/>
+        </collection>
+        <data name="output_file" format="yaml" label="Center axis info" from_work_dir="output.yaml"/>
+    </outputs>
+    <help><![CDATA[
+        Find the center axis for a tomography reconstruction.
+    ]]></help>
+    <expand macro="citations"/>
+</tool>

@@ -18,7 +18,7 @@ def __main__():
     parser.add_argument('-i', '--input_file',
             required=True,
             type=pathlib.Path,
-            help='''Full or relative path to the input file (in yaml or nxs format).''')
+            help='''Full or relative path to the input file (in yaml or Nexus format).''')
     parser.add_argument('-o', '--output_file',
             required=True,
             type=pathlib.Path,
@@ -91,6 +91,9 @@ def __main__():
  
     # Stop memory monitoring
 #    tracemalloc.stop()
+
+    logging.info('Completed tomography data reduction')
+
 
 if __name__ == "__main__":
     __main__()

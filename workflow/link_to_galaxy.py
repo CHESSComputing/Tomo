@@ -42,7 +42,7 @@ def link_to_galaxy(filename:str, galaxy=None, user=None, password=None, api_key=
 #        with open(filename, 'r') as f:
 #            data = safe_load(f)
 #    elif extension == '.nxs':
-    if extension == '.nxs':
+    if extension == '.nxs' or extension == '.nex':
         with NXFile(filename, mode='r') as nxfile:
             data = nxfile.readfile()
     else:
