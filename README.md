@@ -1,3 +1,5 @@
+## Code is obsolete. It is now incorporated in ChessAnalysisPipeline
+
 ## Creating conda environment
 
  * Use the file environment.yml to create the environment  (note: you can change the name of the environment from "tomopy" to another name, but then you will need to use that name in the following commands when activating environment)
